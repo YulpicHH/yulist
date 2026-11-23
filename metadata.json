@@ -1,0 +1,6 @@
+{
+  "name": "yulist",
+  "description": "Настольный планировщик задач в стиле macOS с папками, точными дедлайнами, подзадачами, календарём и экспортом в PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

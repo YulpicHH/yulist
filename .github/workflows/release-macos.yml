@@ -1,0 +1,48 @@
+name: Build macOS DMG Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install web dependencies
+        run: npm install
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Install Electron packager for macOS
+        run: npm install --no-save electron@^34.0.0 electron-builder@^25.1.8
+
+      - name: Package macOS DMG (Apple Silicon & Intel)
+        run: npx electron-builder --mac dmg --config electron-builder.yml --publish never
+
+      - name: Upload DMG artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yulist-macos-dmg
+          path: release/*.dmg
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.dmg
+          generate_release_notes: true

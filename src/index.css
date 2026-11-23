@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Manrope", -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  --font-sans: "Plus Jakarta Sans", "Manrope", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-canvas: #0B111E;
+  --color-sidebar: #111827;
+  --color-surface: #161F31;
+  --color-surface-hover: #1B263B;
+  --color-surface-inset: #121A2A;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    font-family: var(--font-sans);
+    background-color: var(--color-canvas);
+    color: #E2E8F0;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+
+  /* Optical compensation for light text on dark surfaces */
+  body {
+    letter-spacing: 0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Native date & time picker icons readable on dark backgrounds */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.72) sepia(0.1) saturate(1.2) hue-rotate(185deg);
+    cursor: pointer;
+    opacity: 0.78;
+    transition: opacity 150ms ease;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  input[type="time"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+}
+
+/* Subtle cosmic night-sky canvas inspired by user mockup, restrained for macOS clarity */
+.yulist-canvas {
+  background-color: #0B111E;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(226, 232, 240, 0.22) 50%, transparent 100%),
+    radial-gradient(1.2px 1.2px at 28% 72%, rgba(148, 163, 184, 0.18) 50%, transparent 100%),
+    radial-gradient(1px 1px at 44% 34%, rgba(226, 232, 240, 0.16) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 67% 22%, rgba(191, 219, 254, 0.2) 50%, transparent 100%),
+    radial-gradient(1px 1px at 79% 64%, rgba(226, 232, 240, 0.18) 50%, transparent 100%),
+    radial-gradient(1.2px 1.2px at 91% 14%, rgba(148, 163, 184, 0.16) 50%, transparent 100%),
+    radial-gradient(1px 1px at 56% 86%, rgba(226, 232, 240, 0.16) 50%, transparent 100%),
+    radial-gradient(1px 1px at 18% 51%, rgba(148, 163, 184, 0.14) 50%, transparent 100%),
+    radial-gradient(700px 420px at 78% -8%, rgba(59, 130, 246, 0.06), transparent 70%);
+  background-attachment: fixed;
+}
+
+/* Custom sleek macOS scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.35);
+}
+
+/* Electron macOS draggable window titlebar region helper */
+.macos-drag {
+  -webkit-app-region: drag;
+}
+
+.macos-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Dedicated print layout for crisp Cyrillic vector PDF export */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 15mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    color-scheme: light !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+}
+
+@media screen {
+  .print-only {
+    display: none;
+  }
+}
