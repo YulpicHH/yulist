@@ -123,20 +123,30 @@ export interface Task {
   completedAt: string | null;
 }
 
-export type ViewMode = 'list' | 'calendar';
+export interface NoteFolder {
+  id: string;
+  name: string;
+  color: FolderColorId;
+  createdAt: string;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  folderId: string | null;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ViewMode = 'list' | 'calendar' | 'notes';
 export type StatusFilter = 'all' | 'active' | 'completed';
 export type DeadlineFilter = 'all' | 'today' | 'urgent' | 'week' | 'overdue' | 'none';
-
-export interface PdfExportOptions {
-  scope: 'filtered' | 'all';
-  includeCompleted: boolean;
-  includeSubtasks: boolean;
-}
 
 export interface YulistDesktopBridge {
   isElectron: boolean;
   platform: string;
-  exportPdf: (suggestedFilename: string) => Promise<{ saved: boolean; filePath?: string; error?: string }>;
 }
 
 declare global {

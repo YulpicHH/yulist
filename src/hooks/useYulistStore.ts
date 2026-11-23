@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createInitialFolders, createInitialTasks } from '../data/seedData';
+import {
+  createInitialFolders,
+  createInitialNoteFolders,
+  createInitialNotes,
+  createInitialTasks,
+} from '../data/seedData';
 import {
   DeadlineFilter,
   Folder,
   FolderColorId,
+  Note,
+  NoteFolder,
   StatusFilter,
   Subtask,
   Task,
@@ -17,6 +24,8 @@ interface PersistedWorkspace {
   version: 1;
   folders: Folder[];
   tasks: Task[];
+  noteFolders: NoteFolder[];
+  notes: Note[];
 }
 
 export interface ToastNotice {
@@ -24,6 +33,11 @@ export interface ToastNotice {
   message: string;
   canUndo?: boolean;
 }
+
+type UndoBackup =
+  | { kind: 'task'; item: Task }
+  | { kind: 'note'; item: Note }
+  | null;
 
 function generateId(prefix: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -38,6 +52,7 @@ function loadInitialWorkspace(): PersistedWorkspace {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<PersistedWorkspace>;
       if (Array.isArray(parsed.folders) && Array.isArray(parsed.tasks)) {
+        const hasNotesState = Array.isArray(parsed.noteFolders) && Array.isArray(parsed.notes);
         return {
           version: 1,
           folders: parsed.folders,
@@ -48,6 +63,14 @@ function loadInitialWorkspace(): PersistedWorkspace {
             dueDate: t.dueDate ?? null,
             completedAt: t.completedAt ?? null,
           })),
+          noteFolders: hasNotesState ? parsed.noteFolders! : createInitialNoteFolders(),
+          notes: hasNotesState
+            ? parsed.notes!.map((n) => ({
+                ...n,
+                pinned: Boolean(n.pinned),
+                folderId: n.folderId ?? null,
+              }))
+            : createInitialNotes(),
         };
       }
     }
@@ -58,23 +81,30 @@ function loadInitialWorkspace(): PersistedWorkspace {
     version: 1,
     folders: createInitialFolders(),
     tasks: createInitialTasks(),
+    noteFolders: createInitialNoteFolders(),
+    notes: createInitialNotes(),
   };
 }
 
 export function useYulistStore() {
   const [workspace, setWorkspace] = useState<PersistedWorkspace>(() => loadInitialWorkspace());
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
+  const [activeNoteFolderId, setActiveNoteFolderId] = useState<string>('all');
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(
+    () => workspace.notes[0]?.id ?? null
+  );
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [noteSearchQuery, setNoteSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>('all');
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [toast, setToast] = useState<ToastNotice | null>(null);
 
-  const deletedTaskBackupRef = useRef<Task | null>(null);
+  const undoBackupRef = useRef<UndoBackup>(null);
   const toastTimerRef = useRef<number | null>(null);
 
-  // Persist workspace to localStorage whenever folders or tasks change
+  // Persist workspace to localStorage whenever folders, tasks, noteFolders, or notes change
   useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
@@ -98,7 +128,7 @@ export function useYulistStore() {
     setToast({ id: generateId('toast'), message, canUndo });
     toastTimerRef.current = window.setTimeout(() => {
       setToast(null);
-      deletedTaskBackupRef.current = null;
+      undoBackupRef.current = null;
     }, 5200);
   }, []);
 
@@ -107,53 +137,56 @@ export function useYulistStore() {
       window.clearTimeout(toastTimerRef.current);
     }
     setToast(null);
-    deletedTaskBackupRef.current = null;
+    undoBackupRef.current = null;
   }, []);
 
-  // Folder actions
-  const addFolder = useCallback((name: string, color: FolderColorId) => {
-    const trimmed = name.trim();
-    if (!trimmed) return null;
-    const newFolder: Folder = {
-      id: generateId('folder'),
-      name: trimmed,
-      color,
-      createdAt: new Date().toISOString(),
-    };
-    setWorkspace((prev) => ({
-      ...prev,
-      folders: [...prev.folders, newFolder],
-    }));
-    showToast(`Папка «${trimmed}» создана`);
-    return newFolder;
-  }, [showToast]);
+  // Task Folder actions
+  const addFolder = useCallback(
+    (name: string, color: FolderColorId) => {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const newFolder: Folder = {
+        id: generateId('folder'),
+        name: trimmed,
+        color,
+        createdAt: new Date().toISOString(),
+      };
+      setWorkspace((prev) => ({
+        ...prev,
+        folders: [...prev.folders, newFolder],
+      }));
+      showToast(`Папка «${trimmed}» создана`);
+      return newFolder;
+    },
+    [showToast]
+  );
 
-  const updateFolder = useCallback((folderId: string, name: string, color: FolderColorId) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setWorkspace((prev) => ({
-      ...prev,
-      folders: prev.folders.map((f) =>
-        f.id === folderId ? { ...f, name: trimmed, color } : f
-      ),
-    }));
-    showToast(`Папка «${trimmed}» обновлена`);
-  }, [showToast]);
+  const updateFolder = useCallback(
+    (folderId: string, name: string, color: FolderColorId) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setWorkspace((prev) => ({
+        ...prev,
+        folders: prev.folders.map((f) =>
+          f.id === folderId ? { ...f, name: trimmed, color } : f
+        ),
+      }));
+      showToast(`Папка «${trimmed}» обновлена`);
+    },
+    [showToast]
+  );
 
   const deleteFolder = useCallback(
     (folderId: string, mode: 'move' | 'delete', targetFolderId: string | null) => {
       setWorkspace((prev) => {
         const folderToDelete = prev.folders.find((f) => f.id === folderId);
         const remainingFolders = prev.folders.filter((f) => f.id !== folderId);
-        let updatedTasks: Task[];
-
-        if (mode === 'delete') {
-          updatedTasks = prev.tasks.filter((t) => t.folderId !== folderId);
-        } else {
-          updatedTasks = prev.tasks.map((t) =>
-            t.folderId === folderId ? { ...t, folderId: targetFolderId } : t
-          );
-        }
+        const updatedTasks =
+          mode === 'delete'
+            ? prev.tasks.filter((t) => t.folderId !== folderId)
+            : prev.tasks.map((t) =>
+                t.folderId === folderId ? { ...t, folderId: targetFolderId } : t
+              );
 
         if (folderToDelete) {
           showToast(`Папка «${folderToDelete.name}» удалена`);
@@ -167,6 +200,70 @@ export function useYulistStore() {
       });
 
       setActiveFolderId((current) => (current === folderId ? 'all' : current));
+    },
+    [showToast]
+  );
+
+  // Note Folder actions
+  const addNoteFolder = useCallback(
+    (name: string, color: FolderColorId) => {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const newFolder: NoteFolder = {
+        id: generateId('nfolder'),
+        name: trimmed,
+        color,
+        createdAt: new Date().toISOString(),
+      };
+      setWorkspace((prev) => ({
+        ...prev,
+        noteFolders: [...prev.noteFolders, newFolder],
+      }));
+      showToast(`Папка заметок «${trimmed}» создана`);
+      return newFolder;
+    },
+    [showToast]
+  );
+
+  const updateNoteFolder = useCallback(
+    (folderId: string, name: string, color: FolderColorId) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setWorkspace((prev) => ({
+        ...prev,
+        noteFolders: prev.noteFolders.map((f) =>
+          f.id === folderId ? { ...f, name: trimmed, color } : f
+        ),
+      }));
+      showToast(`Папка заметок «${trimmed}» обновлена`);
+    },
+    [showToast]
+  );
+
+  const deleteNoteFolder = useCallback(
+    (folderId: string, mode: 'move' | 'delete', targetFolderId: string | null) => {
+      setWorkspace((prev) => {
+        const folderToDelete = prev.noteFolders.find((f) => f.id === folderId);
+        const remainingFolders = prev.noteFolders.filter((f) => f.id !== folderId);
+        const updatedNotes =
+          mode === 'delete'
+            ? prev.notes.filter((n) => n.folderId !== folderId)
+            : prev.notes.map((n) =>
+                n.folderId === folderId ? { ...n, folderId: targetFolderId } : n
+              );
+
+        if (folderToDelete) {
+          showToast(`Папка заметок «${folderToDelete.name}» удалена`);
+        }
+
+        return {
+          ...prev,
+          noteFolders: remainingFolders,
+          notes: updatedNotes,
+        };
+      });
+
+      setActiveNoteFolderId((current) => (current === folderId ? 'all' : current));
     },
     [showToast]
   );
@@ -258,7 +355,7 @@ export function useYulistStore() {
       setWorkspace((prev) => {
         const target = prev.tasks.find((t) => t.id === taskId);
         if (!target) return prev;
-        deletedTaskBackupRef.current = target;
+        undoBackupRef.current = { kind: 'task', item: target };
         showToast(`Задача «${target.title}» удалена`, true);
         return {
           ...prev,
@@ -268,20 +365,6 @@ export function useYulistStore() {
     },
     [showToast]
   );
-
-  const undoDeleteTask = useCallback(() => {
-    const backup = deletedTaskBackupRef.current;
-    if (!backup) return;
-    deletedTaskBackupRef.current = null;
-    setWorkspace((prev) => {
-      if (prev.tasks.some((t) => t.id === backup.id)) return prev;
-      return {
-        ...prev,
-        tasks: [...prev.tasks, backup].sort((a, b) => a.order - b.order),
-      };
-    });
-    dismissToast();
-  }, [dismissToast]);
 
   const reorderTasks = useCallback((draggedTaskId: string, targetTaskId: string) => {
     if (draggedTaskId === targetTaskId) return;
@@ -353,13 +436,123 @@ export function useYulistStore() {
     }));
   }, []);
 
+  // Note actions
+  const addNote = useCallback((folderId?: string | null) => {
+    const nowIso = new Date().toISOString();
+    const targetFolder =
+      folderId !== undefined
+        ? folderId
+        : activeNoteFolderId !== 'all'
+          ? activeNoteFolderId
+          : null;
+
+    const newNote: Note = {
+      id: generateId('note'),
+      title: '',
+      content: '',
+      folderId: targetFolder,
+      pinned: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    setWorkspace((prev) => ({
+      ...prev,
+      notes: [newNote, ...prev.notes],
+    }));
+    setSelectedNoteId(newNote.id);
+    return newNote;
+  }, [activeNoteFolderId]);
+
+  const updateNote = useCallback(
+    (
+      noteId: string,
+      updates: Partial<Pick<Note, 'title' | 'content' | 'folderId' | 'pinned'>>
+    ) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        notes: prev.notes.map((note) =>
+          note.id === noteId
+            ? {
+                ...note,
+                ...updates,
+                updatedAt: new Date().toISOString(),
+              }
+            : note
+        ),
+      }));
+    },
+    []
+  );
+
+  const toggleNotePinned = useCallback((noteId: string) => {
+    setWorkspace((prev) => ({
+      ...prev,
+      notes: prev.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              pinned: !note.pinned,
+            }
+          : note
+      ),
+    }));
+  }, []);
+
+  const deleteNote = useCallback(
+    (noteId: string) => {
+      setWorkspace((prev) => {
+        const target = prev.notes.find((n) => n.id === noteId);
+        if (!target) return prev;
+        undoBackupRef.current = { kind: 'note', item: target };
+        const label = target.title.trim() || 'Без названия';
+        showToast(`Заметка «${label}» удалена`, true);
+        const remaining = prev.notes.filter((n) => n.id !== noteId);
+        return {
+          ...prev,
+          notes: remaining,
+        };
+      });
+      setSelectedNoteId((current) => (current === noteId ? null : current));
+    },
+    [showToast]
+  );
+
+  // Unified Undo handler (supports both deleted tasks and deleted notes)
+  const undoLastDelete = useCallback(() => {
+    const backup = undoBackupRef.current;
+    if (!backup) return;
+    undoBackupRef.current = null;
+
+    if (backup.kind === 'task') {
+      setWorkspace((prev) => {
+        if (prev.tasks.some((t) => t.id === backup.item.id)) return prev;
+        return {
+          ...prev,
+          tasks: [...prev.tasks, backup.item].sort((a, b) => a.order - b.order),
+        };
+      });
+    } else {
+      setWorkspace((prev) => {
+        if (prev.notes.some((n) => n.id === backup.item.id)) return prev;
+        return {
+          ...prev,
+          notes: [backup.item, ...prev.notes],
+        };
+      });
+      setSelectedNoteId(backup.item.id);
+    }
+
+    dismissToast();
+  }, [dismissToast]);
+
   const resetFilters = useCallback(() => {
     setSearchQuery('');
     setStatusFilter('all');
     setDeadlineFilter('all');
   }, []);
 
-  // Derived data
+  // Derived data: Tasks
   const sortedAllTasks = useMemo(
     () => [...workspace.tasks].sort((a, b) => a.order - b.order),
     [workspace.tasks]
@@ -417,10 +610,82 @@ export function useYulistStore() {
     [activeFolderId, foldersById]
   );
 
+  // Derived data: Notes
+  const noteFoldersById = useMemo(() => {
+    const map = new Map<string, NoteFolder>();
+    workspace.noteFolders.forEach((f) => map.set(f.id, f));
+    return map;
+  }, [workspace.noteFolders]);
+
+  const noteFolderCounts = useMemo(() => {
+    const counts: Record<string, { total: number; active: number }> = {
+      all: { total: 0, active: 0 },
+    };
+    workspace.noteFolders.forEach((f) => {
+      counts[f.id] = { total: 0, active: 0 };
+    });
+
+    workspace.notes.forEach((n) => {
+      counts.all.total += 1;
+      counts.all.active += 1;
+      if (n.folderId && counts[n.folderId]) {
+        counts[n.folderId].total += 1;
+        counts[n.folderId].active += 1;
+      }
+    });
+    return counts;
+  }, [workspace.noteFolders, workspace.notes]);
+
+  const filteredNotes = useMemo(() => {
+    const q = noteSearchQuery.trim().toLowerCase();
+    return [...workspace.notes]
+      .filter((note) => {
+        if (activeNoteFolderId !== 'all' && note.folderId !== activeNoteFolderId) {
+          return false;
+        }
+        if (q) {
+          const folderName = note.folderId
+            ? noteFoldersById.get(note.folderId)?.name.toLowerCase() ?? ''
+            : '';
+          const matchesTitle = note.title.toLowerCase().includes(q);
+          const matchesContent = note.content.toLowerCase().includes(q);
+          const matchesFolder = folderName.includes(q);
+          if (!matchesTitle && !matchesContent && !matchesFolder) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+  }, [workspace.notes, activeNoteFolderId, noteSearchQuery, noteFoldersById]);
+
+  const activeNoteFolder = useMemo(
+    () => (activeNoteFolderId === 'all' ? null : noteFoldersById.get(activeNoteFolderId) ?? null),
+    [activeNoteFolderId, noteFoldersById]
+  );
+
+  // Keep selectedNoteId valid when filtering or switching folders
+  useEffect(() => {
+    if (filteredNotes.length === 0) {
+      if (selectedNoteId !== null) setSelectedNoteId(null);
+      return;
+    }
+    if (!selectedNoteId || !filteredNotes.some((n) => n.id === selectedNoteId)) {
+      setSelectedNoteId(filteredNotes[0].id);
+    }
+  }, [filteredNotes, selectedNoteId]);
+
+  const selectedNote = useMemo(
+    () => (selectedNoteId ? workspace.notes.find((n) => n.id === selectedNoteId) ?? null : null),
+    [selectedNoteId, workspace.notes]
+  );
+
   const hasActiveFilters =
     searchQuery.trim().length > 0 || statusFilter !== 'all' || deadlineFilter !== 'all';
 
   return {
+    // Task folders & tasks
     folders: workspace.folders,
     foldersById,
     allTasks: sortedAllTasks,
@@ -429,6 +694,20 @@ export function useYulistStore() {
     activeFolderId,
     activeFolder,
     setActiveFolderId,
+    // Note folders & notes
+    noteFolders: workspace.noteFolders,
+    noteFoldersById,
+    filteredNotes,
+    noteFolderCounts,
+    activeNoteFolderId,
+    activeNoteFolder,
+    setActiveNoteFolderId,
+    selectedNoteId,
+    selectedNote,
+    setSelectedNoteId,
+    noteSearchQuery,
+    setNoteSearchQuery,
+    // Shared UI
     viewMode,
     setViewMode,
     searchQuery,
@@ -443,10 +722,16 @@ export function useYulistStore() {
     toast,
     showToast,
     dismissToast,
-    undoDeleteTask,
+    undoLastDelete,
+    // Task folder CRUD
     addFolder,
     updateFolder,
     deleteFolder,
+    // Note folder CRUD
+    addNoteFolder,
+    updateNoteFolder,
+    deleteNoteFolder,
+    // Task CRUD
     addTask,
     updateTask,
     toggleTaskCompleted,
@@ -455,5 +740,10 @@ export function useYulistStore() {
     toggleSubtask,
     addSubtask,
     deleteSubtask,
+    // Note CRUD
+    addNote,
+    updateNote,
+    toggleNotePinned,
+    deleteNote,
   };
 }

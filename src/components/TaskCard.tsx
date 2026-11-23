@@ -244,20 +244,26 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 key={sub.id}
                 className="group/sub flex items-center justify-between gap-2 py-0.5"
               >
-                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-sm">
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={sub.completed}
-                    onClick={() => onToggleSubtask(task.id, sub.id)}
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={sub.completed}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleSubtask(task.id, sub.id);
+                  }}
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 rounded"
+                >
+                  <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
                       sub.completed
                         ? 'border-blue-500 bg-blue-500 text-white'
                         : 'border-slate-600 bg-slate-900/70 hover:border-slate-400'
                     }`}
                   >
-                    {sub.completed && <Check className="h-3 w-3 stroke-[3]" />}
-                  </button>
+                    {sub.completed && <Check className="pointer-events-none h-3 w-3 stroke-[3]" />}
+                  </span>
                   <span
                     className={`truncate text-[13px] transition-colors ${
                       sub.completed ? 'text-slate-500 line-through' : 'text-slate-200'
@@ -265,7 +271,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   >
                     {sub.title}
                   </span>
-                </label>
+                </button>
 
                 <button
                   type="button"

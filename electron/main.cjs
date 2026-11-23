@@ -1,5 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
-const fs = require('fs');
+const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 
 const isDev = Boolean(process.env.YULIST_DEV_URL);
@@ -99,40 +98,6 @@ function createMainWindow() {
 
   return win;
 }
-
-ipcMain.handle('yulist:export-pdf', async (event, suggestedFilename) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win) {
-    return { saved: false, error: 'Window unavailable' };
-  }
-
-  const defaultName =
-    typeof suggestedFilename === 'string' && suggestedFilename.endsWith('.pdf')
-      ? suggestedFilename
-      : 'yulist-отчет.pdf';
-
-  const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: 'Сохранить отчёт PDF',
-    defaultPath: path.join(app.getPath('documents'), defaultName),
-    filters: [{ name: 'PDF документы', extensions: ['pdf'] }],
-  });
-
-  if (canceled || !filePath) {
-    return { saved: false };
-  }
-
-  try {
-    const pdfBuffer = await win.webContents.printToPDF({
-      printBackground: true,
-      pageSize: 'A4',
-      margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
-    });
-    fs.writeFileSync(filePath, pdfBuffer);
-    return { saved: true, filePath };
-  } catch (err) {
-    return { saved: false, error: err instanceof Error ? err.message : String(err) };
-  }
-});
 
 app.whenReady().then(() => {
   app.setName('yulist');

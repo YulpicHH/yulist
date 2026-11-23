@@ -6,6 +6,7 @@ import { pluralizeRu } from '../utils/dateUtils';
 interface FolderFormModalProps {
   isOpen: boolean;
   editingFolder: Folder | null;
+  itemKind?: 'tasks' | 'notes';
   onClose: () => void;
   onSave: (name: string, color: FolderColorId) => void;
 }
@@ -13,6 +14,7 @@ interface FolderFormModalProps {
 export const FolderFormModal: React.FC<FolderFormModalProps> = ({
   isOpen,
   editingFolder,
+  itemKind = 'tasks',
   onClose,
   onSave,
 }) => {
@@ -41,7 +43,7 @@ export const FolderFormModal: React.FC<FolderFormModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs no-print"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -53,7 +55,13 @@ export const FolderFormModal: React.FC<FolderFormModalProps> = ({
       >
         <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-4">
           <h2 id="folder-modal-title" className="font-display text-base font-semibold text-slate-100">
-            {editingFolder ? 'Редактировать папку' : 'Новая папка'}
+            {editingFolder
+              ? itemKind === 'notes'
+                ? 'Редактировать папку заметок'
+                : 'Редактировать папку'
+              : itemKind === 'notes'
+                ? 'Новая папка заметок'
+                : 'Новая папка'}
           </h2>
           <button
             type="button"
@@ -78,7 +86,11 @@ export const FolderFormModal: React.FC<FolderFormModalProps> = ({
               maxLength={40}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Например: Алгоритмы, Диплом..."
+              placeholder={
+                itemKind === 'notes'
+                  ? 'Например: Лекции, Конспекты, Идеи...'
+                  : 'Например: Алгоритмы, Диплом...'
+              }
               className="h-10 w-full rounded-lg border border-slate-700/90 bg-[#0D1424] px-3.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
@@ -131,7 +143,8 @@ export const FolderFormModal: React.FC<FolderFormModalProps> = ({
 
 interface DeleteFolderModalProps {
   folder: Folder | null;
-  taskCount: number;
+  itemCount: number;
+  itemKind?: 'tasks' | 'notes';
   otherFolders: Folder[];
   onClose: () => void;
   onConfirm: (folderId: string, mode: 'move' | 'delete', targetFolderId: string | null) => void;
@@ -139,7 +152,8 @@ interface DeleteFolderModalProps {
 
 export const DeleteFolderModal: React.FC<DeleteFolderModalProps> = ({
   folder,
-  taskCount,
+  itemCount,
+  itemKind = 'tasks',
   otherFolders,
   onClose,
   onConfirm,
@@ -156,9 +170,14 @@ export const DeleteFolderModal: React.FC<DeleteFolderModalProps> = ({
 
   if (!folder) return null;
 
+  const countLabel =
+    itemKind === 'notes'
+      ? pluralizeRu(itemCount, 'заметка', 'заметки', 'заметок')
+      : pluralizeRu(itemCount, 'задача', 'задачи', 'задач');
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs no-print"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -183,18 +202,20 @@ export const DeleteFolderModal: React.FC<DeleteFolderModalProps> = ({
         </div>
 
         <div className="space-y-4 px-5 py-4 text-sm text-slate-300">
-          {taskCount === 0 ? (
+          {itemCount === 0 ? (
             <p className="text-slate-400">
-              В этой папке сейчас нет задач. Папка будет удалена безвозвратно.
+              {itemKind === 'notes'
+                ? 'В этой папке сейчас нет заметок. Папка будет удалена безвозвратно.'
+                : 'В этой папке сейчас нет задач. Папка будет удалена безвозвратно.'}
             </p>
           ) : (
             <>
               <p className="text-slate-300">
                 В папке находится{' '}
                 <span className="font-mono font-semibold text-slate-100 tabular-nums">
-                  {pluralizeRu(taskCount, 'задача', 'задачи', 'задач')}
+                  {countLabel}
                 </span>
-                . Что сделать с задачами?
+                . Что сделать с ними?
               </p>
 
               <div className="space-y-2">
@@ -207,7 +228,9 @@ export const DeleteFolderModal: React.FC<DeleteFolderModalProps> = ({
                     className="mt-1 accent-blue-500"
                   />
                   <div className="flex-1">
-                    <div className="font-medium text-slate-200">Сохранить задачи</div>
+                    <div className="font-medium text-slate-200">
+                      {itemKind === 'notes' ? 'Сохранить заметки' : 'Сохранить задачи'}
+                    </div>
                     <div className="mt-1.5">
                       <select
                         value={targetFolderId}
@@ -215,7 +238,11 @@ export const DeleteFolderModal: React.FC<DeleteFolderModalProps> = ({
                         onChange={(e) => setTargetFolderId(e.target.value)}
                         className="h-9 w-full rounded-md border border-slate-700 bg-[#141D2F] px-2.5 text-xs text-slate-200 focus:border-blue-500/70 focus:outline-none disabled:opacity-50"
                       >
-                        <option value="">Оставить без папки (в разделе «Все»)</option>
+                        <option value="">
+                          {itemKind === 'notes'
+                            ? 'Оставить без папки (в «Все заметки»)'
+                            : 'Оставить без папки (в разделе «Все»)'}
+                        </option>
                         {otherFolders.map((f) => (
                           <option key={f.id} value={f.id}>
                             Перенести в «{f.name}»
@@ -235,7 +262,9 @@ export const DeleteFolderModal: React.FC<DeleteFolderModalProps> = ({
                     className="accent-red-500"
                   />
                   <span className="font-medium text-red-300">
-                    Удалить папку вместе со всеми задачами
+                    {itemKind === 'notes'
+                      ? 'Удалить папку вместе со всеми заметками'
+                      : 'Удалить папку вместе со всеми задачами'}
                   </span>
                 </label>
               </div>

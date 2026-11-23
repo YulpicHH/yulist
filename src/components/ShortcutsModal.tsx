@@ -7,11 +7,11 @@ interface ShortcutsModalProps {
 }
 
 const SHORTCUTS = [
-  { keys: ['⌘', 'K'], alt: 'Ctrl + K', label: 'Фокус на поиск по задачам' },
-  { keys: ['N'], alt: '⌘ ⇧ N', label: 'Создать новую задачу' },
-  { keys: ['1'], alt: null, label: 'Переключить на вид «Список»' },
-  { keys: ['2'], alt: null, label: 'Переключить на вид «Календарь»' },
-  { keys: ['⌘', 'E'], alt: 'Ctrl + E', label: 'Открыть экспорт в PDF' },
+  { keys: ['⌘', 'K'], alt: 'Ctrl + K', label: 'Фокус на поиск (задачи или заметки)' },
+  { keys: ['N'], alt: '⌘ ⇧ N', label: 'Создать новую задачу или заметку' },
+  { keys: ['1'], alt: null, label: 'Переключить на «Список»' },
+  { keys: ['2'], alt: null, label: 'Переключить на «Календарь»' },
+  { keys: ['3'], alt: null, label: 'Переключить на «Заметки»' },
   { keys: ['?'], alt: null, label: 'Показать или скрыть эту справку' },
   { keys: ['Esc'], alt: null, label: 'Закрыть окно или снять фокус' },
 ];

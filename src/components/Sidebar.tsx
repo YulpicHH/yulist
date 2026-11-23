@@ -11,6 +11,8 @@ import {
 import { Folder, getFolderColor } from '../types/todo';
 
 interface SidebarProps {
+  sectionLabel: string;
+  allLabel: string;
   folders: Folder[];
   folderCounts: Record<string, { total: number; active: number }>;
   activeFolderId: string;
@@ -24,6 +26,8 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
+  sectionLabel,
+  allLabel,
   folders,
   folderCounts,
   activeFolderId,
@@ -73,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex items-center justify-between px-4 pt-2 pb-2">
         <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
           <FolderIcon className="h-3.5 w-3.5 text-slate-500" />
-          <span>Папки</span>
+          <span>{sectionLabel}</span>
         </div>
         <span className="font-mono text-[11px] text-slate-500 tabular-nums">
           {folders.length}
@@ -101,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 activeFolderId === 'all' ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-300'
               }`}
             />
-            <span className="truncate font-medium">Все</span>
+            <span className="truncate font-medium">{allLabel}</span>
           </span>
           <span
             className={`ml-2 font-mono text-xs tabular-nums ${

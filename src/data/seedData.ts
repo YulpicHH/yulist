@@ -1,4 +1,4 @@
-import { Folder, Task } from '../types/todo';
+import { Folder, Note, NoteFolder, Task } from '../types/todo';
 import { toLocalDateTimeString } from '../utils/dateUtils';
 
 export function createInitialFolders(): Folder[] {
@@ -99,6 +99,55 @@ export function createInitialTasks(): Task[] {
       ],
       createdAt: createdIso,
       completedAt: null,
+    },
+  ];
+}
+
+export function createInitialNoteFolders(): NoteFolder[] {
+  const created = new Date().toISOString();
+  return [
+    { id: 'nfolder-lectures', name: 'Лекции', color: 'blue', createdAt: created },
+    { id: 'nfolder-summaries', name: 'Конспекты', color: 'emerald', createdAt: created },
+    { id: 'nfolder-personal', name: 'Личное', color: 'amber', createdAt: created },
+  ];
+}
+
+export function createInitialNotes(): Note[] {
+  const now = new Date();
+  const isoNow = now.toISOString();
+  const earlier = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
+  const yesterday = new Date(now.getTime() - 26 * 60 * 60 * 1000).toISOString();
+
+  return [
+    {
+      id: 'note-seed-1',
+      title: 'План подготовки к сессии',
+      content:
+        '1. Закрыть все лабораторные по физике до конца недели.\n2. Проверить расчётную часть в РГР по TRPO.\n3. Повторить билеты по дискретной математике и графам.\n\nПолезный ориентир: оставлять минимум 1 день запаса перед каждой сдачей.',
+      folderId: 'nfolder-summaries',
+      pinned: true,
+      createdAt: earlier,
+      updatedAt: isoNow,
+    },
+    {
+      id: 'note-seed-2',
+      title: 'Заметки с лекции по TRPO',
+      content:
+        'Основные принципы архитектуры:\n- Разделение ответственности (SRP)\n- Явные контракты между модулями\n- Трассируемость требований от ТЗ к тестам\n\nУточнить у преподавателя требования к оформлению диаграммы компонентов.',
+      folderId: 'nfolder-lectures',
+      pinned: false,
+      createdAt: yesterday,
+      updatedAt: earlier,
+    },
+    {
+      id: 'note-seed-3',
+      title: 'Идеи для пет-проекта',
+      content:
+        'Сделать быстрый локальный планировщик на MacBook с горячими клавишами, папками и заметками.\nКлючевые критерии: мгновенный старт, чистая тёмная тема, работа без интернета.',
+      folderId: 'nfolder-personal',
+      pinned: false,
+      createdAt: yesterday,
+      updatedAt: yesterday,
     },
   ];
 }
