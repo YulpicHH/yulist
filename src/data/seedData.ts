@@ -118,12 +118,58 @@ export function createInitialNotes(): Note[] {
   const earlier = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
   const yesterday = new Date(now.getTime() - 26 * 60 * 60 * 1000).toISOString();
 
+  const dueSoon = new Date(now.getTime() + 36 * 60 * 60 * 1000);
+  dueSoon.setHours(20, 0, 0, 0);
+
   return [
     {
       id: 'note-seed-1',
       title: 'План подготовки к сессии',
       content:
-        '1. Закрыть все лабораторные по физике до конца недели.\n2. Проверить расчётную часть в РГР по TRPO.\n3. Повторить билеты по дискретной математике и графам.\n\nПолезный ориентир: оставлять минимум 1 день запаса перед каждой сдачей.',
+        'Главный фокус этой недели — закрыть долги заранее.\nЗакрыть лабораторные по физике\nПроверить расчётную часть в РГР по TRPO\nПовторить билеты по дискретной математике\nСдать итоговую лабораторную по физике',
+      blocks: [
+        {
+          id: 'blk-s1-1',
+          type: 'paragraph',
+          runs: [
+            { text: 'Главный фокус этой недели — ' },
+            { text: 'закрыть долги заранее', bold: true, highlight: 'rgba(245, 158, 11, 0.28)' },
+            { text: ', чтобы оставить минимум день запаса перед каждой сдачей.' },
+          ],
+        },
+        {
+          id: 'blk-s1-2',
+          type: 'checklist',
+          checked: true,
+          runs: [{ text: 'Закрыть лабораторные по физике' }],
+        },
+        {
+          id: 'blk-s1-3',
+          type: 'checklist',
+          checked: false,
+          runs: [{ text: 'Проверить расчётную часть в РГР по TRPO' }],
+        },
+        {
+          id: 'blk-s1-4',
+          type: 'checklist',
+          checked: false,
+          runs: [{ text: 'Повторить билеты по дискретной математике', italic: true }],
+        },
+        {
+          id: 'blk-s1-5',
+          type: 'task',
+          taskData: {
+            title: 'Сдать итоговую лабораторную по физике',
+            dueDate: toLocalDateTimeString(dueSoon),
+            completed: false,
+            linkedTaskId: null,
+            subtasks: [
+              { id: 'nsub-1', title: 'Оформить графики и выводы', completed: true },
+              { id: 'nsub-2', title: 'Загрузить отчёт преподавателю', completed: false },
+            ],
+          },
+        },
+      ],
       folderId: 'nfolder-summaries',
       pinned: true,
       createdAt: earlier,
@@ -133,7 +179,35 @@ export function createInitialNotes(): Note[] {
       id: 'note-seed-2',
       title: 'Заметки с лекции по TRPO',
       content:
-        'Основные принципы архитектуры:\n- Разделение ответственности (SRP)\n- Явные контракты между модулями\n- Трассируемость требований от ТЗ к тестам\n\nУточнить у преподавателя требования к оформлению диаграммы компонентов.',
+        'Основные принципы архитектуры\nРазделение ответственности (SRP)\nЯвные контракты между модулями\nТрассируемость требований от ТЗ к тестам',
+      blocks: [
+        {
+          id: 'blk-s2-1',
+          type: 'heading',
+          runs: [{ text: 'Основные принципы архитектуры' }],
+        },
+        {
+          id: 'blk-s2-2',
+          type: 'bullet',
+          bulletStyle: 'star',
+          runs: [
+            { text: 'Разделение ответственности (SRP)', bold: true, color: '#60A5FA' },
+            { text: ' — каждый модуль отвечает за одну задачу' },
+          ],
+        },
+        {
+          id: 'blk-s2-3',
+          type: 'bullet',
+          bulletStyle: 'dot',
+          runs: [{ text: 'Явные контракты между модулями' }],
+        },
+        {
+          id: 'blk-s2-4',
+          type: 'bullet',
+          bulletStyle: 'square',
+          runs: [{ text: 'Трассируемость требований от ТЗ к тестам' }],
+        },
+      ],
       folderId: 'nfolder-lectures',
       pinned: false,
       createdAt: yesterday,
@@ -143,7 +217,30 @@ export function createInitialNotes(): Note[] {
       id: 'note-seed-3',
       title: 'Идеи для пет-проекта',
       content:
-        'Сделать быстрый локальный планировщик на MacBook с горячими клавишами, папками и заметками.\nКлючевые критерии: мгновенный старт, чистая тёмная тема, работа без интернета.',
+        'Быстрый локальный планировщик на MacBook с горячими клавишами, папками и заметками.\nМгновенный старт и работа офлайн\nЧистая тёмная тема macOS',
+      blocks: [
+        {
+          id: 'blk-s3-1',
+          type: 'paragraph',
+          runs: [
+            { text: 'Быстрый локальный планировщик на MacBook с ' },
+            { text: 'горячими клавишами', color: '#34D399', bold: true },
+            { text: ', папками и заметками.' },
+          ],
+        },
+        {
+          id: 'blk-s3-2',
+          type: 'bullet',
+          bulletStyle: 'heart',
+          runs: [{ text: 'Мгновенный старт и работа офлайн' }],
+        },
+        {
+          id: 'blk-s3-3',
+          type: 'bullet',
+          bulletStyle: 'heart',
+          runs: [{ text: 'Чистая тёмная тема macOS' }],
+        },
+      ],
       folderId: 'nfolder-personal',
       pinned: false,
       createdAt: yesterday,

@@ -12,8 +12,9 @@ const SHORTCUTS = [
   { keys: ['1'], alt: null, label: 'Переключить на «Список»' },
   { keys: ['2'], alt: null, label: 'Переключить на «Календарь»' },
   { keys: ['3'], alt: null, label: 'Переключить на «Заметки»' },
+  { keys: ['⌘', 'B / I / U'], alt: null, label: 'Жирный / курсив / подчёркнутый в заметке' },
   { keys: ['?'], alt: null, label: 'Показать или скрыть эту справку' },
-  { keys: ['Esc'], alt: null, label: 'Закрыть окно или снять фокус' },
+  { keys: ['Esc'], alt: null, label: 'Закрыть окно или выйти к списку заметок' },
 ];
 
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose }) => {

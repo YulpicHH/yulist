@@ -20,7 +20,7 @@ import { TaskCard } from './components/TaskCard';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { UndoToast } from './components/UndoToast';
 import { useYulistStore } from './hooks/useYulistStore';
-import { Folder, FolderColorId, getFolderColor, Task } from './types/todo';
+import { Folder, FolderColorId, getFolderColor, NoteTaskData, Task } from './types/todo';
 import { pluralizeRu } from './utils/dateUtils';
 
 function isEditableElement(target: EventTarget | null): boolean {
@@ -92,8 +92,13 @@ export default function App() {
           closeAllModals();
           return;
         }
-        if (document.activeElement instanceof HTMLElement) {
+        if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
           document.activeElement.blur();
+          return;
+        }
+        if (isNotesMode && store.selectedNoteId) {
+          e.preventDefault();
+          store.setSelectedNoteId(null);
         }
         return;
       }
@@ -195,6 +200,19 @@ export default function App() {
 
   const handleQuickAddOnDate = (dateKey: string) => {
     setPrefillDate(dateKey);
+  };
+
+  const handleAddTaskFromNote = (taskData: NoteTaskData, folderId: string | null) => {
+    const created = store.addTask({
+      title: taskData.title,
+      folderId,
+      dueDate: taskData.dueDate,
+      subtasks: taskData.subtasks.map((s) => ({ ...s })),
+    });
+    if (created) {
+      store.showToast(`Задача «${created.title}» добавлена в общий список`);
+    }
+    return created;
   };
 
   return (
@@ -333,15 +351,20 @@ export default function App() {
                   selectedNote={store.selectedNote}
                   noteFolders={store.noteFolders}
                   noteFoldersById={store.noteFoldersById}
+                  taskFolders={store.folders}
                   activeNoteFolderId={store.activeNoteFolderId}
                   searchQuery={store.noteSearchQuery}
                   searchInputRef={noteSearchInputRef}
+                  nowMs={store.nowMs}
                   onSearchChange={store.setNoteSearchQuery}
                   onSelectNote={store.setSelectedNoteId}
+                  onCloseNote={() => store.setSelectedNoteId(null)}
                   onCreateNote={handleCreateNoteAndFocus}
                   onUpdateNote={store.updateNote}
                   onTogglePin={store.toggleNotePinned}
                   onDeleteNote={store.deleteNote}
+                  onDeleteNotes={store.deleteNotes}
+                  onAddTaskFromNote={handleAddTaskFromNote}
                   focusTitleSignal={noteFocusSignal}
                 />
               ) : (

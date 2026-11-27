@@ -123,6 +123,76 @@ export interface Task {
   completedAt: string | null;
 }
 
+export type BulletStyle = 'dot' | 'star' | 'square' | 'heart';
+
+export interface BulletStyleMeta {
+  id: BulletStyle;
+  symbol: string;
+  label: string;
+}
+
+export const BULLET_STYLES: BulletStyleMeta[] = [
+  { id: 'dot', symbol: '•', label: 'Точка' },
+  { id: 'star', symbol: '★', label: 'Звёздочка' },
+  { id: 'square', symbol: '▪', label: 'Квадратик' },
+  { id: 'heart', symbol: '♥', label: 'Сердечко' },
+];
+
+export interface NoteColorOption {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export const NOTE_TEXT_COLORS: NoteColorOption[] = [
+  { id: 'default', label: 'Обычный', value: '' },
+  { id: 'blue', label: 'Синий', value: '#60A5FA' },
+  { id: 'cyan', label: 'Бирюзовый', value: '#22D3EE' },
+  { id: 'emerald', label: 'Зелёный', value: '#34D399' },
+  { id: 'amber', label: 'Жёлтый', value: '#FBBF24' },
+  { id: 'orange', label: 'Оранжевый', value: '#FB923C' },
+  { id: 'rose', label: 'Розовый', value: '#FB7185' },
+  { id: 'violet', label: 'Сиреневый', value: '#C084FC' },
+];
+
+export const NOTE_HIGHLIGHT_COLORS: NoteColorOption[] = [
+  { id: 'none', label: 'Без выделения', value: '' },
+  { id: 'amber', label: 'Жёлтый маркер', value: 'rgba(245, 158, 11, 0.28)' },
+  { id: 'blue', label: 'Синий маркер', value: 'rgba(59, 130, 246, 0.30)' },
+  { id: 'emerald', label: 'Зелёный маркер', value: 'rgba(16, 185, 129, 0.28)' },
+  { id: 'rose', label: 'Розовый маркер', value: 'rgba(244, 63, 94, 0.28)' },
+  { id: 'violet', label: 'Фиолетовый маркер', value: 'rgba(168, 85, 247, 0.28)' },
+];
+
+export interface TextRun {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  color?: string;
+  highlight?: string;
+}
+
+export interface NoteTaskData {
+  title: string;
+  dueDate: string | null;
+  completed: boolean;
+  subtasks: Subtask[];
+  linkedTaskId?: string | null;
+}
+
+export type NoteBlockType = 'paragraph' | 'heading' | 'bullet' | 'checklist' | 'task';
+
+export interface NoteBlock {
+  id: string;
+  type: NoteBlockType;
+  runs?: TextRun[];
+  bulletStyle?: BulletStyle;
+  checked?: boolean;
+  taskData?: NoteTaskData;
+}
+
 export interface NoteFolder {
   id: string;
   name: string;
@@ -133,7 +203,9 @@ export interface NoteFolder {
 export interface Note {
   id: string;
   title: string;
+  /** Plain-text extract kept in sync for search and previews */
   content: string;
+  blocks: NoteBlock[];
   folderId: string | null;
   pinned: boolean;
   createdAt: string;

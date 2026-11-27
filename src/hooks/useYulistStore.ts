@@ -10,13 +10,19 @@ import {
   Folder,
   FolderColorId,
   Note,
+  NoteBlock,
   NoteFolder,
   StatusFilter,
   Subtask,
   Task,
   ViewMode,
 } from '../types/todo';
-import { matchesDeadlineFilter } from '../utils/dateUtils';
+import { matchesDeadlineFilter, pluralizeRu } from '../utils/dateUtils';
+import {
+  createBlockId,
+  extractNotePlainText,
+  migratePlainTextToBlocks,
+} from '../utils/noteUtils';
 
 const STORAGE_KEY = 'yulist_workspace_v1';
 
@@ -36,7 +42,7 @@ export interface ToastNotice {
 
 type UndoBackup =
   | { kind: 'task'; item: Task }
-  | { kind: 'note'; item: Note }
+  | { kind: 'notes'; items: Note[]; previousSelectedId: string | null }
   | null;
 
 function generateId(prefix: string): string {
@@ -44,6 +50,26 @@ function generateId(prefix: string): string {
     return `${prefix}-${crypto.randomUUID()}`;
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function hydrateNote(raw: Partial<Note>): Note {
+  const rawContent = typeof raw.content === 'string' ? raw.content : '';
+  const blocks: NoteBlock[] =
+    Array.isArray(raw.blocks) && raw.blocks.length > 0
+      ? raw.blocks
+      : migratePlainTextToBlocks(rawContent);
+  const nowIso = new Date().toISOString();
+
+  return {
+    id: raw.id || generateId('note'),
+    title: typeof raw.title === 'string' ? raw.title : '',
+    content: extractNotePlainText(blocks),
+    blocks,
+    folderId: raw.folderId ?? null,
+    pinned: Boolean(raw.pinned),
+    createdAt: raw.createdAt || nowIso,
+    updatedAt: raw.updatedAt || nowIso,
+  };
 }
 
 function loadInitialWorkspace(): PersistedWorkspace {
@@ -64,13 +90,7 @@ function loadInitialWorkspace(): PersistedWorkspace {
             completedAt: t.completedAt ?? null,
           })),
           noteFolders: hasNotesState ? parsed.noteFolders! : createInitialNoteFolders(),
-          notes: hasNotesState
-            ? parsed.notes!.map((n) => ({
-                ...n,
-                pinned: Boolean(n.pinned),
-                folderId: n.folderId ?? null,
-              }))
-            : createInitialNotes(),
+          notes: hasNotesState ? parsed.notes!.map(hydrateNote) : createInitialNotes(),
         };
       }
     }
@@ -90,9 +110,8 @@ export function useYulistStore() {
   const [workspace, setWorkspace] = useState<PersistedWorkspace>(() => loadInitialWorkspace());
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
   const [activeNoteFolderId, setActiveNoteFolderId] = useState<string>('all');
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(
-    () => workspace.notes[0]?.id ?? null
-  );
+  // Starts at null so the user can browse the general notes overview field without being locked inside a note
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [noteSearchQuery, setNoteSearchQuery] = useState<string>('');
@@ -138,6 +157,12 @@ export function useYulistStore() {
     }
     setToast(null);
     undoBackupRef.current = null;
+  }, []);
+
+  const selectNoteFolder = useCallback((folderId: string) => {
+    setActiveNoteFolderId(folderId);
+    // Return to the overview field of the chosen folder so the user isn't trapped in a previous note
+    setSelectedNoteId(null);
   }, []);
 
   // Task Folder actions
@@ -437,49 +462,55 @@ export function useYulistStore() {
   }, []);
 
   // Note actions
-  const addNote = useCallback((folderId?: string | null) => {
-    const nowIso = new Date().toISOString();
-    const targetFolder =
-      folderId !== undefined
-        ? folderId
-        : activeNoteFolderId !== 'all'
-          ? activeNoteFolderId
-          : null;
+  const addNote = useCallback(
+    (folderId?: string | null) => {
+      const nowIso = new Date().toISOString();
+      const targetFolder =
+        folderId !== undefined
+          ? folderId
+          : activeNoteFolderId !== 'all'
+            ? activeNoteFolderId
+            : null;
 
-    const newNote: Note = {
-      id: generateId('note'),
-      title: '',
-      content: '',
-      folderId: targetFolder,
-      pinned: false,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
+      const newNote: Note = {
+        id: generateId('note'),
+        title: '',
+        content: '',
+        blocks: [{ id: createBlockId(), type: 'paragraph', runs: [] }],
+        folderId: targetFolder,
+        pinned: false,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
 
-    setWorkspace((prev) => ({
-      ...prev,
-      notes: [newNote, ...prev.notes],
-    }));
-    setSelectedNoteId(newNote.id);
-    return newNote;
-  }, [activeNoteFolderId]);
+      setWorkspace((prev) => ({
+        ...prev,
+        notes: [newNote, ...prev.notes],
+      }));
+      setSelectedNoteId(newNote.id);
+      return newNote;
+    },
+    [activeNoteFolderId]
+  );
 
   const updateNote = useCallback(
     (
       noteId: string,
-      updates: Partial<Pick<Note, 'title' | 'content' | 'folderId' | 'pinned'>>
+      updates: Partial<Pick<Note, 'title' | 'blocks' | 'folderId' | 'pinned'>>
     ) => {
       setWorkspace((prev) => ({
         ...prev,
-        notes: prev.notes.map((note) =>
-          note.id === noteId
-            ? {
-                ...note,
-                ...updates,
-                updatedAt: new Date().toISOString(),
-              }
-            : note
-        ),
+        notes: prev.notes.map((note) => {
+          if (note.id !== noteId) return note;
+          const nextBlocks = updates.blocks ?? note.blocks;
+          return {
+            ...note,
+            ...updates,
+            blocks: nextBlocks,
+            content: updates.blocks ? extractNotePlainText(nextBlocks) : note.content,
+            updatedAt: new Date().toISOString(),
+          };
+        }),
       }));
     },
     []
@@ -499,26 +530,45 @@ export function useYulistStore() {
     }));
   }, []);
 
-  const deleteNote = useCallback(
-    (noteId: string) => {
+  const deleteNotes = useCallback(
+    (noteIds: string[]) => {
+      if (noteIds.length === 0) return;
+      const idSet = new Set(noteIds);
       setWorkspace((prev) => {
-        const target = prev.notes.find((n) => n.id === noteId);
-        if (!target) return prev;
-        undoBackupRef.current = { kind: 'note', item: target };
-        const label = target.title.trim() || 'Без названия';
-        showToast(`Заметка «${label}» удалена`, true);
-        const remaining = prev.notes.filter((n) => n.id !== noteId);
+        const removed = prev.notes.filter((n) => idSet.has(n.id));
+        if (removed.length === 0) return prev;
+        undoBackupRef.current = {
+          kind: 'notes',
+          items: removed,
+          previousSelectedId: selectedNoteId,
+        };
+        if (removed.length === 1) {
+          const label = removed[0].title.trim() || 'Без названия';
+          showToast(`Заметка «${label}» удалена`, true);
+        } else {
+          showToast(
+            `Удалено: ${pluralizeRu(removed.length, 'заметка', 'заметки', 'заметок')}`,
+            true
+          );
+        }
         return {
           ...prev,
-          notes: remaining,
+          notes: prev.notes.filter((n) => !idSet.has(n.id)),
         };
       });
-      setSelectedNoteId((current) => (current === noteId ? null : current));
+      setSelectedNoteId((current) => (current && idSet.has(current) ? null : current));
     },
-    [showToast]
+    [selectedNoteId, showToast]
   );
 
-  // Unified Undo handler (supports both deleted tasks and deleted notes)
+  const deleteNote = useCallback(
+    (noteId: string) => {
+      deleteNotes([noteId]);
+    },
+    [deleteNotes]
+  );
+
+  // Unified Undo handler (supports single task, single note, or bulk-deleted notes)
   const undoLastDelete = useCallback(() => {
     const backup = undoBackupRef.current;
     if (!backup) return;
@@ -534,13 +584,17 @@ export function useYulistStore() {
       });
     } else {
       setWorkspace((prev) => {
-        if (prev.notes.some((n) => n.id === backup.item.id)) return prev;
+        const existingIds = new Set(prev.notes.map((n) => n.id));
+        const toRestore = backup.items.filter((item) => !existingIds.has(item.id));
+        if (toRestore.length === 0) return prev;
         return {
           ...prev,
-          notes: [backup.item, ...prev.notes],
+          notes: [...toRestore, ...prev.notes],
         };
       });
-      setSelectedNoteId(backup.item.id);
+      if (backup.previousSelectedId) {
+        setSelectedNoteId(backup.previousSelectedId);
+      }
     }
 
     dismissToast();
@@ -665,16 +719,12 @@ export function useYulistStore() {
     [activeNoteFolderId, noteFoldersById]
   );
 
-  // Keep selectedNoteId valid when filtering or switching folders
+  // Only clear selectedNoteId if the open note itself was deleted (never force-select another note)
   useEffect(() => {
-    if (filteredNotes.length === 0) {
-      if (selectedNoteId !== null) setSelectedNoteId(null);
-      return;
+    if (selectedNoteId && !workspace.notes.some((n) => n.id === selectedNoteId)) {
+      setSelectedNoteId(null);
     }
-    if (!selectedNoteId || !filteredNotes.some((n) => n.id === selectedNoteId)) {
-      setSelectedNoteId(filteredNotes[0].id);
-    }
-  }, [filteredNotes, selectedNoteId]);
+  }, [selectedNoteId, workspace.notes]);
 
   const selectedNote = useMemo(
     () => (selectedNoteId ? workspace.notes.find((n) => n.id === selectedNoteId) ?? null : null),
@@ -701,7 +751,7 @@ export function useYulistStore() {
     noteFolderCounts,
     activeNoteFolderId,
     activeNoteFolder,
-    setActiveNoteFolderId,
+    setActiveNoteFolderId: selectNoteFolder,
     selectedNoteId,
     selectedNote,
     setSelectedNoteId,
@@ -745,5 +795,6 @@ export function useYulistStore() {
     updateNote,
     toggleNotePinned,
     deleteNote,
+    deleteNotes,
   };
 }
