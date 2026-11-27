@@ -12,6 +12,7 @@ import {
 import { CalendarView } from './components/CalendarView';
 import { FilterToolbar } from './components/FilterToolbar';
 import { DeleteFolderModal, FolderFormModal } from './components/FolderModal';
+import { NoteLockSettingsModal, NoteUnlockModal } from './components/NoteLockModals';
 import { NotesView } from './components/NotesView';
 import { QuickAddBar } from './components/QuickAddBar';
 import { ShortcutsModal } from './components/ShortcutsModal';
@@ -20,7 +21,7 @@ import { TaskCard } from './components/TaskCard';
 import { TaskEditorModal } from './components/TaskEditorModal';
 import { UndoToast } from './components/UndoToast';
 import { useYulistStore } from './hooks/useYulistStore';
-import { Folder, FolderColorId, getFolderColor, NoteTaskData, Task } from './types/todo';
+import { Folder, FolderColorId, getFolderColor, Note, NoteTaskData, Task } from './types/todo';
 import { pluralizeRu } from './utils/dateUtils';
 
 function isEditableElement(target: EventTarget | null): boolean {
@@ -53,6 +54,8 @@ export default function App() {
     kind: 'tasks' | 'notes';
   }>({ folder: null, kind: 'tasks' });
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [unlockingNote, setUnlockingNote] = useState<Note | null>(null);
+  const [lockSettingsNote, setLockSettingsNote] = useState<Note | null>(null);
   const [prefillDate, setPrefillDate] = useState<string | null>(null);
   const [noteFocusSignal, setNoteFocusSignal] = useState(0);
 
@@ -66,13 +69,17 @@ export default function App() {
     Boolean(editingTask) ||
     folderModalState.open ||
     Boolean(deletingFolderState.folder) ||
-    shortcutsOpen;
+    shortcutsOpen ||
+    Boolean(unlockingNote) ||
+    Boolean(lockSettingsNote);
 
   const closeAllModals = useCallback(() => {
     setEditingTask(null);
     setFolderModalState((prev) => ({ ...prev, open: false, folder: null }));
     setDeletingFolderState((prev) => ({ ...prev, folder: null }));
     setShortcutsOpen(false);
+    setUnlockingNote(null);
+    setLockSettingsNote(null);
   }, []);
 
   const handleCreateNoteAndFocus = useCallback(() => {
@@ -213,6 +220,14 @@ export default function App() {
       store.showToast(`Задача «${created.title}» добавлена в общий список`);
     }
     return created;
+  };
+
+  const handleRequestOpenNote = (note: Note) => {
+    if (note.lock) {
+      setUnlockingNote(note);
+      return;
+    }
+    store.setSelectedNoteId(note.id);
   };
 
   return (
@@ -357,7 +372,8 @@ export default function App() {
                   searchInputRef={noteSearchInputRef}
                   nowMs={store.nowMs}
                   onSearchChange={store.setNoteSearchQuery}
-                  onSelectNote={store.setSelectedNoteId}
+                  onRequestOpenNote={handleRequestOpenNote}
+                  onOpenLockSettings={(note) => setLockSettingsNote(note)}
                   onCloseNote={() => store.setSelectedNoteId(null)}
                   onCreateNote={handleCreateNoteAndFocus}
                   onUpdateNote={store.updateNote}
@@ -369,7 +385,7 @@ export default function App() {
                 />
               ) : (
                 <>
-                  {/* Filter & search bar */}
+                  {/* Filter, search & sort bar */}
                   <FilterToolbar
                     searchInputRef={taskSearchInputRef}
                     searchQuery={store.searchQuery}
@@ -378,6 +394,9 @@ export default function App() {
                     onStatusChange={store.setStatusFilter}
                     deadlineFilter={store.deadlineFilter}
                     onDeadlineChange={store.setDeadlineFilter}
+                    showSort={store.viewMode === 'list'}
+                    sortMode={store.taskSortMode}
+                    onSortChange={store.setTaskSortMode}
                     hasActiveFilters={store.hasActiveFilters}
                     onResetFilters={store.resetFilters}
                   />
@@ -454,6 +473,9 @@ export default function App() {
                               }}
                               onDrop={(targetId) => {
                                 if (draggingTaskId && draggingTaskId !== targetId) {
+                                  if (store.taskSortMode !== 'manual') {
+                                    store.setTaskSortMode('manual');
+                                  }
                                   store.reorderTasks(draggingTaskId, targetId);
                                 }
                                 setDraggingTaskId(null);
@@ -524,6 +546,21 @@ export default function App() {
         ).filter((f) => f.id !== deletingFolderState.folder?.id)}
         onClose={() => setDeletingFolderState((prev) => ({ ...prev, folder: null }))}
         onConfirm={handleConfirmDeleteFolder}
+      />
+
+      <NoteUnlockModal
+        note={unlockingNote}
+        onClose={() => setUnlockingNote(null)}
+        onUnlocked={(noteId) => {
+          setUnlockingNote(null);
+          store.setSelectedNoteId(noteId);
+        }}
+      />
+
+      <NoteLockSettingsModal
+        note={lockSettingsNote}
+        onClose={() => setLockSettingsNote(null)}
+        onSaveLock={store.setNoteLock}
       />
 
       <ShortcutsModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

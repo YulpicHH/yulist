@@ -144,8 +144,6 @@ export function matchesDeadlineFilter(task: Task, filter: DeadlineFilter, nowMs:
   switch (filter) {
     case 'today':
       return toLocalDateKey(parsed) === toLocalDateKey(now);
-    case 'urgent':
-      return !task.completed && diffMs >= 0 && diffMs <= 24 * 60 * 60 * 1000;
     case 'week': {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       const endOfWeek = startOfToday + 7 * 24 * 60 * 60 * 1000;

@@ -1,6 +1,6 @@
 import React from 'react';
-import { ChevronDown, RotateCcw, Search, X } from 'lucide-react';
-import { DeadlineFilter, StatusFilter } from '../types/todo';
+import { ArrowUpDown, ChevronDown, RotateCcw, Search, X } from 'lucide-react';
+import { DeadlineFilter, StatusFilter, TaskSortMode } from '../types/todo';
 
 interface FilterToolbarProps {
   searchInputRef: React.RefObject<HTMLInputElement | null>;
@@ -10,6 +10,9 @@ interface FilterToolbarProps {
   onStatusChange: (val: StatusFilter) => void;
   deadlineFilter: DeadlineFilter;
   onDeadlineChange: (val: DeadlineFilter) => void;
+  showSort?: boolean;
+  sortMode: TaskSortMode;
+  onSortChange: (val: TaskSortMode) => void;
   hasActiveFilters: boolean;
   onResetFilters: () => void;
 }
@@ -22,6 +25,9 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
   onStatusChange,
   deadlineFilter,
   onDeadlineChange,
+  showSort = true,
+  sortMode,
+  onSortChange,
   hasActiveFilters,
   onResetFilters,
 }) => {
@@ -29,7 +35,7 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
     <div className="rounded-xl border border-slate-800/90 bg-[#131C2E]/85 p-2.5 backdrop-blur-xs">
       <div className="grid grid-cols-1 gap-2.5 md:grid-cols-12">
         {/* Search input */}
-        <div className="relative md:col-span-5">
+        <div className={`relative ${showSort ? 'md:col-span-4' : 'md:col-span-5'}`}>
           <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             ref={searchInputRef}
@@ -57,37 +63,65 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
         </div>
 
         {/* Status filter */}
-        <div className="relative md:col-span-3">
+        <div className={`relative ${showSort ? 'md:col-span-2' : 'md:col-span-3'}`}>
           <select
             value={statusFilter}
             onChange={(e) => onStatusChange(e.target.value as StatusFilter)}
             aria-label="Фильтр по статусу"
-            className="h-10 w-full appearance-none rounded-lg border border-slate-800 bg-[#0D1424] pr-9 pl-3.5 text-sm text-slate-200 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className="h-10 w-full appearance-none rounded-lg border border-slate-800 bg-[#0D1424] pr-8 pl-3 text-sm text-slate-200 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           >
             <option value="all">Все статусы</option>
             <option value="active">Активные</option>
             <option value="completed">Выполненные</option>
           </select>
-          <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-slate-500" />
         </div>
 
-        {/* Deadline filter */}
-        <div className={`relative ${hasActiveFilters ? 'md:col-span-3' : 'md:col-span-4'}`}>
+        {/* Deadline filter (without "Срочные < 24ч") */}
+        <div
+          className={`relative ${
+            showSort
+              ? hasActiveFilters
+                ? 'md:col-span-2'
+                : 'md:col-span-3'
+              : hasActiveFilters
+                ? 'md:col-span-3'
+                : 'md:col-span-4'
+          }`}
+        >
           <select
             value={deadlineFilter}
             onChange={(e) => onDeadlineChange(e.target.value as DeadlineFilter)}
             aria-label="Фильтр по дедлайну"
-            className="h-10 w-full appearance-none rounded-lg border border-slate-800 bg-[#0D1424] pr-9 pl-3.5 text-sm text-slate-200 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className="h-10 w-full appearance-none rounded-lg border border-slate-800 bg-[#0D1424] pr-8 pl-3 text-sm text-slate-200 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           >
             <option value="all">Любой дедлайн</option>
             <option value="today">Сегодня</option>
-            <option value="urgent">Срочные (&lt; 24ч)</option>
             <option value="week">На этой неделе</option>
             <option value="overdue">Просроченные</option>
             <option value="none">Без дедлайна</option>
           </select>
-          <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-slate-500" />
         </div>
+
+        {/* Task sort dropdown (List view) */}
+        {showSort && (
+          <div className="relative md:col-span-3">
+            <ArrowUpDown className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+            <select
+              value={sortMode}
+              onChange={(e) => onSortChange(e.target.value as TaskSortMode)}
+              aria-label="Сортировка задач"
+              className="h-10 w-full appearance-none rounded-lg border border-slate-800 bg-[#0D1424] pr-8 pl-8 text-sm text-slate-200 transition-colors focus:border-blue-500/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="manual">Мой порядок</option>
+              <option value="remaining">По остатку времени</option>
+              <option value="createdDesc">Сначала новые</option>
+              <option value="createdAsc">Сначала старые</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          </div>
+        )}
 
         {/* Reset button when filtered */}
         {hasActiveFilters && (

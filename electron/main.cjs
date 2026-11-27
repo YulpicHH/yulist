@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, systemPreferences } = require('electron');
 const path = require('path');
 
 const isDev = Boolean(process.env.YULIST_DEV_URL);
@@ -33,7 +33,30 @@ function createAppMenu() {
         { role: 'cut', label: 'Вырезать' },
         { role: 'copy', label: 'Скопировать' },
         { role: 'paste', label: 'Вставить' },
-        { role: 'selectAll', label: 'Выделить всё' },
+        {
+          label: 'Выделить всё',
+          accelerator: 'CmdOrCtrl+A',
+          click: (_menuItem, browserWindow) => {
+            if (!browserWindow) return;
+            browserWindow.webContents
+              .executeJavaScript(
+                `(() => {
+                  const ev = new CustomEvent('yulist:select-all', { cancelable: true });
+                  return !window.dispatchEvent(ev);
+                })()`
+              )
+              .then((handled) => {
+                if (!handled && !browserWindow.isDestroyed()) {
+                  browserWindow.webContents.selectAll();
+                }
+              })
+              .catch(() => {
+                if (!browserWindow.isDestroyed()) {
+                  browserWindow.webContents.selectAll();
+                }
+              });
+          },
+        },
       ],
     },
     {
@@ -98,6 +121,40 @@ function createMainWindow() {
 
   return win;
 }
+
+ipcMain.handle('yulist:can-touch-id', () => {
+  try {
+    return (
+      process.platform === 'darwin' &&
+      typeof systemPreferences.canPromptTouchID === 'function' &&
+      systemPreferences.canPromptTouchID()
+    );
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('yulist:prompt-touch-id', async (_event, reason) => {
+  if (
+    process.platform !== 'darwin' ||
+    typeof systemPreferences.promptTouchID !== 'function' ||
+    !systemPreferences.canPromptTouchID()
+  ) {
+    return { ok: false, error: 'Touch ID недоступен на этом устройстве' };
+  }
+
+  const safeReason =
+    typeof reason === 'string' && reason.trim().length > 0
+      ? reason.trim().slice(0, 120)
+      : 'открыть защищённую заметку в yulist';
+
+  try {
+    await systemPreferences.promptTouchID(safeReason);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Проверка Touch ID отменена' };
+  }
+});
 
 app.whenReady().then(() => {
   app.setName('yulist');

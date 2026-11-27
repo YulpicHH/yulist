@@ -182,7 +182,7 @@ export interface NoteTaskData {
   linkedTaskId?: string | null;
 }
 
-export type NoteBlockType = 'paragraph' | 'heading' | 'bullet' | 'checklist' | 'task';
+export type NoteBlockType = 'paragraph' | 'heading' | 'bullet' | 'numbered' | 'checklist' | 'task';
 
 export interface NoteBlock {
   id: string;
@@ -191,6 +191,13 @@ export interface NoteBlock {
   bulletStyle?: BulletStyle;
   checked?: boolean;
   taskData?: NoteTaskData;
+}
+
+export interface NoteLock {
+  salt: string;
+  passwordHash: string;
+  touchIdEnabled: boolean;
+  webAuthnCredentialId?: string | null;
 }
 
 export interface NoteFolder {
@@ -208,17 +215,21 @@ export interface Note {
   blocks: NoteBlock[];
   folderId: string | null;
   pinned: boolean;
+  lock?: NoteLock | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export type ViewMode = 'list' | 'calendar' | 'notes';
 export type StatusFilter = 'all' | 'active' | 'completed';
-export type DeadlineFilter = 'all' | 'today' | 'urgent' | 'week' | 'overdue' | 'none';
+export type DeadlineFilter = 'all' | 'today' | 'week' | 'overdue' | 'none';
+export type TaskSortMode = 'manual' | 'remaining' | 'createdDesc' | 'createdAsc';
 
 export interface YulistDesktopBridge {
   isElectron: boolean;
   platform: string;
+  canUseTouchId?: () => Promise<boolean>;
+  promptTouchId?: (reason: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 declare global {

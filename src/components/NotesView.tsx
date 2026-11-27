@@ -6,6 +6,8 @@ import {
   ChevronDown,
   FileText,
   ListTodo,
+  Lock,
+  LockOpen,
   Minus,
   Pin,
   Plus,
@@ -30,7 +32,8 @@ interface NotesViewProps {
   searchInputRef: React.RefObject<HTMLInputElement | null>;
   nowMs: number;
   onSearchChange: (q: string) => void;
-  onSelectNote: (noteId: string) => void;
+  onRequestOpenNote: (note: Note) => void;
+  onOpenLockSettings: (note: Note) => void;
   onCloseNote: () => void;
   onCreateNote: () => void;
   onUpdateNote: (
@@ -75,7 +78,8 @@ export const NotesView: React.FC<NotesViewProps> = ({
   searchInputRef,
   nowMs,
   onSearchChange,
-  onSelectNote,
+  onRequestOpenNote,
+  onOpenLockSettings,
   onCloseNote,
   onCreateNote,
   onUpdateNote,
@@ -141,14 +145,15 @@ export const NotesView: React.FC<NotesViewProps> = ({
     setSelectedIds(new Set());
   };
 
-  // MODE 2: Inside an open note (with prominent Back button to exit to general field)
+  // MODE 2: Inside an open (unlocked) note
   if (selectedNote) {
     const charCount = selectedNote.content.length;
     const wordCount = selectedNote.content.trim().split(/\s+/).filter(Boolean).length;
+    const isLocked = Boolean(selectedNote.lock);
 
     return (
       <div className="flex min-h-[600px] flex-col overflow-hidden rounded-xl border border-slate-800/90 bg-[#161F31]/95">
-        {/* Top bar: Exit to general field + Folder + Pin + Delete */}
+        {/* Top bar: Exit to general field + Folder + Lock + Pin + Delete */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -185,6 +190,21 @@ export const NotesView: React.FC<NotesViewProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onOpenLockSettings(selectedNote)}
+              title={isLocked ? 'Настройки пароля и Touch ID' : 'Поставить пароль на заметку'}
+              aria-label={isLocked ? 'Настройки пароля' : 'Поставить пароль'}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                isLocked
+                  ? 'bg-amber-500/18 text-amber-300 ring-1 ring-inset ring-amber-500/35 hover:bg-amber-500/25'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              {isLocked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{isLocked ? 'Пароль включён' : 'Пароль'}</span>
+            </button>
+
             <button
               type="button"
               onClick={() => onTogglePin(selectedNote.id)}
@@ -238,7 +258,11 @@ export const NotesView: React.FC<NotesViewProps> = ({
 
         {/* Quiet editor footer */}
         <div className="flex items-center justify-between border-t border-slate-800/70 px-6 py-2.5 font-mono text-[11px] text-slate-500 tabular-nums">
-          <span>Сохраняется автоматически · Esc — вернуться к заметкам</span>
+          <span>
+            {isLocked
+              ? 'Заметка автоматически заблокируется при выходе · Esc — к списку заметок'
+              : 'Сохраняется автоматически · Esc — к списку заметок'}
+          </span>
           <span>
             {wordCount} слов · {charCount} символов
           </span>
@@ -340,9 +364,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-red-500/20 px-3 text-xs font-semibold text-red-300 ring-1 ring-inset ring-red-500/35 transition-colors hover:bg-red-500/30 whitespace-nowrap"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                <span>
-                  Удалить ({selectedIds.size})
-                </span>
+                <span>Удалить ({selectedIds.size})</span>
               </button>
             </div>
           )}
@@ -387,22 +409,25 @@ export const NotesView: React.FC<NotesViewProps> = ({
         <div className="grid grid-cols-1 gap-4 pb-12 sm:grid-cols-2 xl:grid-cols-3">
           {notes.map((note) => {
             const isChecked = selectedIds.has(note.id);
+            const isLocked = Boolean(note.lock);
             const folder = note.folderId ? noteFoldersById.get(note.folderId) : undefined;
             const folderColor = getFolderColor(folder?.color);
-            const stats = getNoteBlockStats(note.blocks);
+            const stats = isLocked ? null : getNoteBlockStats(note.blocks);
 
             return (
               <article
                 key={note.id}
-                onClick={() => onSelectNote(note.id)}
+                onClick={() => onRequestOpenNote(note)}
                 className={`group relative flex min-h-[168px] cursor-pointer flex-col justify-between rounded-xl border p-4 transition-all duration-150 ${
                   isChecked
                     ? 'border-blue-500/60 bg-blue-500/[0.08] ring-1 ring-inset ring-blue-500/25'
-                    : 'border-slate-800/90 bg-[#161F31]/95 hover:border-slate-700 hover:bg-[#192338]'
+                    : isLocked
+                      ? 'border-amber-500/30 bg-[#161F31]/95 hover:border-amber-400/50 hover:bg-[#192338]'
+                      : 'border-slate-800/90 bg-[#161F31]/95 hover:border-slate-700 hover:bg-[#192338]'
                 }`}
               >
                 <div>
-                  {/* Card header: top-left checkbox square + title + pin/delete */}
+                  {/* Card header: top-left checkbox square + title + lock/pin/delete */}
                   <div className="flex items-start gap-2.5">
                     <button
                       type="button"
@@ -422,11 +447,34 @@ export const NotesView: React.FC<NotesViewProps> = ({
                       {isChecked && <Check className="pointer-events-none h-3 w-3 stroke-[3]" />}
                     </button>
 
-                    <h3 className="min-w-0 flex-1 truncate font-display text-[15px] font-semibold text-slate-100">
-                      {note.title.trim() || 'Без названия'}
-                    </h3>
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                      {isLocked && (
+                        <Lock
+                          className="h-3.5 w-3.5 shrink-0 text-amber-400"
+                          aria-label="Защищена паролем"
+                        />
+                      )}
+                      <h3 className="min-w-0 flex-1 truncate font-display text-[15px] font-semibold text-slate-100">
+                        {note.title.trim() || 'Без названия'}
+                      </h3>
+                    </div>
 
                     <div className="flex shrink-0 items-center gap-0.5">
+                      {!isLocked && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenLockSettings(note);
+                          }}
+                          title="Поставить пароль на заметку"
+                          aria-label="Поставить пароль на заметку"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 opacity-0 transition-colors hover:bg-slate-800 hover:text-amber-300 group-hover:opacity-100"
+                        >
+                          <Lock className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -459,10 +507,17 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Preview snippet */}
-                  <p className="mt-2.5 line-clamp-3 pl-7 text-xs leading-relaxed text-slate-400">
-                    {getPreviewLine(note.content)}
-                  </p>
+                  {/* Body area: strictly hidden when locked, preview shown when unlocked */}
+                  {isLocked ? (
+                    <div className="mt-4 flex items-center gap-2 pl-7 text-xs text-slate-500">
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-400/80" />
+                      <span>Содержимое скрыто · введите пароль или Touch ID</span>
+                    </div>
+                  ) : (
+                    <p className="mt-2.5 line-clamp-3 pl-7 text-xs leading-relaxed text-slate-400">
+                      {getPreviewLine(note.content)}
+                    </p>
+                  )}
                 </div>
 
                 {/* Card footer metadata */}
@@ -484,7 +539,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
                     )}
                   </div>
 
-                  {(stats.checklistTotal > 0 || stats.taskTotal > 0) && (
+                  {stats && (stats.checklistTotal > 0 || stats.taskTotal > 0) && (
                     <div className="flex items-center gap-2.5 font-mono text-slate-400 tabular-nums">
                       {stats.checklistTotal > 0 && (
                         <span className="inline-flex items-center gap-1" title="Пункты чек-листа">

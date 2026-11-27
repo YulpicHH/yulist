@@ -288,6 +288,15 @@ export function migratePlainTextToBlocks(content: string): NoteBlock[] {
       };
     }
 
+    const numberedMatch = trimmed.match(/^\d+[.)]\s+(.*)$/);
+    if (numberedMatch) {
+      return {
+        id: createBlockId(),
+        type: 'numbered',
+        runs: numberedMatch[1] ? [{ text: numberedMatch[1] }] : [],
+      };
+    }
+
     return {
       id: createBlockId(),
       type: 'paragraph',

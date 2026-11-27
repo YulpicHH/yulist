@@ -12,12 +12,14 @@ import {
   Note,
   NoteBlock,
   NoteFolder,
+  NoteLock,
   StatusFilter,
   Subtask,
   Task,
+  TaskSortMode,
   ViewMode,
 } from '../types/todo';
-import { matchesDeadlineFilter, pluralizeRu } from '../utils/dateUtils';
+import { matchesDeadlineFilter, parseDueDate, pluralizeRu } from '../utils/dateUtils';
 import {
   createBlockId,
   extractNotePlainText,
@@ -67,6 +69,7 @@ function hydrateNote(raw: Partial<Note>): Note {
     blocks,
     folderId: raw.folderId ?? null,
     pinned: Boolean(raw.pinned),
+    lock: raw.lock ?? null,
     createdAt: raw.createdAt || nowIso,
     updatedAt: raw.updatedAt || nowIso,
   };
@@ -117,6 +120,7 @@ export function useYulistStore() {
   const [noteSearchQuery, setNoteSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>('all');
+  const [taskSortMode, setTaskSortMode] = useState<TaskSortMode>('manual');
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [toast, setToast] = useState<ToastNotice | null>(null);
 
@@ -161,8 +165,16 @@ export function useYulistStore() {
 
   const selectNoteFolder = useCallback((folderId: string) => {
     setActiveNoteFolderId(folderId);
-    // Return to the overview field of the chosen folder so the user isn't trapped in a previous note
+    // Return to the overview field of the chosen folder (and immediately re-lock any open locked note)
     setSelectedNoteId(null);
+  }, []);
+
+  const changeViewMode = useCallback((nextMode: ViewMode) => {
+    setViewMode(nextMode);
+    if (nextMode !== 'notes') {
+      // Leaving Notes immediately closes any open note so locked notes always require unlock next time
+      setSelectedNoteId(null);
+    }
   }, []);
 
   // Task Folder actions
@@ -530,6 +542,24 @@ export function useYulistStore() {
     }));
   }, []);
 
+  const setNoteLock = useCallback(
+    (noteId: string, lock: NoteLock | null) => {
+      setWorkspace((prev) => ({
+        ...prev,
+        notes: prev.notes.map((note) =>
+          note.id === noteId
+            ? {
+                ...note,
+                lock,
+              }
+            : note
+        ),
+      }));
+      showToast(lock ? 'Заметка защищена паролем' : 'Пароль с заметки снят');
+    },
+    [showToast]
+  );
+
   const deleteNotes = useCallback(
     (noteIds: string[]) => {
       if (noteIds.length === 0) return;
@@ -639,7 +669,7 @@ export function useYulistStore() {
 
   const filteredTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return sortedAllTasks.filter((task) => {
+    const matched = sortedAllTasks.filter((task) => {
       if (activeFolderId !== 'all' && task.folderId !== activeFolderId) {
         return false;
       }
@@ -657,7 +687,47 @@ export function useYulistStore() {
 
       return true;
     });
-  }, [sortedAllTasks, activeFolderId, statusFilter, deadlineFilter, searchQuery, nowMs, foldersById]);
+
+    if (taskSortMode === 'manual') {
+      return matched;
+    }
+
+    const sorted = [...matched];
+    if (taskSortMode === 'remaining') {
+      sorted.sort((a, b) => {
+        // Active tasks come before completed tasks
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        const da = parseDueDate(a.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const db = parseDueDate(b.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+        if (da !== db) return da - db;
+        return a.order - b.order;
+      });
+    } else if (taskSortMode === 'createdDesc') {
+      sorted.sort((a, b) => {
+        const ta = new Date(a.createdAt).getTime() || 0;
+        const tb = new Date(b.createdAt).getTime() || 0;
+        if (tb !== ta) return tb - ta;
+        return b.order - a.order;
+      });
+    } else if (taskSortMode === 'createdAsc') {
+      sorted.sort((a, b) => {
+        const ta = new Date(a.createdAt).getTime() || 0;
+        const tb = new Date(b.createdAt).getTime() || 0;
+        if (ta !== tb) return ta - tb;
+        return a.order - b.order;
+      });
+    }
+    return sorted;
+  }, [
+    sortedAllTasks,
+    activeFolderId,
+    statusFilter,
+    deadlineFilter,
+    searchQuery,
+    nowMs,
+    foldersById,
+    taskSortMode,
+  ]);
 
   const activeFolder = useMemo(
     () => (activeFolderId === 'all' ? null : foldersById.get(activeFolderId) ?? null),
@@ -702,7 +772,8 @@ export function useYulistStore() {
             ? noteFoldersById.get(note.folderId)?.name.toLowerCase() ?? ''
             : '';
           const matchesTitle = note.title.toLowerCase().includes(q);
-          const matchesContent = note.content.toLowerCase().includes(q);
+          // Never search inside locked note bodies so private content stays hidden
+          const matchesContent = note.lock ? false : note.content.toLowerCase().includes(q);
           const matchesFolder = folderName.includes(q);
           if (!matchesTitle && !matchesContent && !matchesFolder) return false;
         }
@@ -759,13 +830,15 @@ export function useYulistStore() {
     setNoteSearchQuery,
     // Shared UI
     viewMode,
-    setViewMode,
+    setViewMode: changeViewMode,
     searchQuery,
     setSearchQuery,
     statusFilter,
     setStatusFilter,
     deadlineFilter,
     setDeadlineFilter,
+    taskSortMode,
+    setTaskSortMode,
     hasActiveFilters,
     resetFilters,
     nowMs,
@@ -794,6 +867,7 @@ export function useYulistStore() {
     addNote,
     updateNote,
     toggleNotePinned,
+    setNoteLock,
     deleteNote,
     deleteNotes,
   };

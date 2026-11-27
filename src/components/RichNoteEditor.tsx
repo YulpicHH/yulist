@@ -8,6 +8,7 @@ import {
   Heading2,
   Highlighter,
   Italic,
+  ListOrdered,
   ListTodo,
   Palette,
   Plus,
@@ -30,7 +31,9 @@ import {
 import { combineDueDate, getDeadlineInfo, splitDueDate } from '../utils/dateUtils';
 import {
   createBlockId,
+  extractNotePlainText,
   getRunsPlainText,
+  normalizeRuns,
   parseElementToRuns,
   renderRunsToElement,
 } from '../utils/noteUtils';
@@ -64,9 +67,18 @@ function getBulletColorClass(style: BulletStyle | undefined): string {
 interface EditableTextBlockProps {
   block: NoteBlock;
   placeholder: string;
+  isAllSelected: boolean;
   registerRef: (id: string, el: HTMLDivElement | null) => void;
   onFocusBlock: (id: string) => void;
+  onClearAllSelected: () => void;
+  onSelectAllNote: () => void;
+  onDeleteAllSelected: () => void;
+  onReplaceAllWithChar: (char: string) => void;
+  onCopyAll: (cut: boolean) => void;
+  onGetAllPlainText: () => string;
+  onFormatAll: (formatKey: 'bold' | 'italic' | 'underline') => void;
   onUpdateRuns: (id: string, runs: TextRun[]) => void;
+  onDeleteSingleLine: (id: string) => void;
   onEnterKey: (id: string) => void;
   onBackspaceEmpty: (id: string) => void;
   onArrowNav: (id: string, dir: 'up' | 'down') => void;
@@ -75,9 +87,18 @@ interface EditableTextBlockProps {
 const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
   block,
   placeholder,
+  isAllSelected,
   registerRef,
   onFocusBlock,
+  onClearAllSelected,
+  onSelectAllNote,
+  onDeleteAllSelected,
+  onReplaceAllWithChar,
+  onCopyAll,
+  onGetAllPlainText,
+  onFormatAll,
   onUpdateRuns,
+  onDeleteSingleLine,
   onEnterKey,
   onBackspaceEmpty,
   onArrowNav,
@@ -108,27 +129,130 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
     e.preventDefault();
     const plain = e.clipboardData.getData('text/plain');
     if (!plain) return;
+    if (isAllSelected) {
+      onReplaceAllWithChar(plain.replace(/\r?\n/g, ' '));
+      return;
+    }
     const singleLine = plain.replace(/\r?\n/g, ' ');
     document.execCommand('insertText', false, singleLine);
     handleInput();
   };
 
+  const handleCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (!isAllSelected) return;
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', onGetAllPlainText());
+  };
+
+  const handleCut = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (!isAllSelected) return;
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', onGetAllPlainText());
+    onDeleteAllSelected();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const mod = e.metaKey || e.ctrlKey;
+    const lowerKey = e.key.toLowerCase();
+    const code = e.code;
 
-    if (mod && e.key.toLowerCase() === 'b') {
+    const isKeyA = code === 'KeyA' || lowerKey === 'a' || lowerKey === 'ф';
+    const isKeyC = code === 'KeyC' || lowerKey === 'c' || lowerKey === 'с';
+    const isKeyX = code === 'KeyX' || lowerKey === 'x' || lowerKey === 'ч';
+    const isKeyB = code === 'KeyB' || lowerKey === 'b' || lowerKey === 'и';
+    const isKeyI = code === 'KeyI' || lowerKey === 'i' || lowerKey === 'ш';
+    const isKeyU = code === 'KeyU' || lowerKey === 'u' || lowerKey === 'г';
+
+    // Cmd+A / Ctrl+A: Select ALL text across the entire note (works in EN & RU keyboard layouts)
+    if (mod && isKeyA) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectAllNote();
+      return;
+    }
+
+    // Handling keys while the entire note text is selected via Cmd+A
+    if (isAllSelected) {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        e.stopPropagation();
+        onDeleteAllSelected();
+        return;
+      }
+      if (mod && isKeyC) {
+        e.preventDefault();
+        e.stopPropagation();
+        onCopyAll(false);
+        return;
+      }
+      if (mod && isKeyX) {
+        e.preventDefault();
+        e.stopPropagation();
+        onCopyAll(true);
+        return;
+      }
+      if (mod && isKeyB) {
+        e.preventDefault();
+        onFormatAll('bold');
+        return;
+      }
+      if (mod && isKeyI) {
+        e.preventDefault();
+        onFormatAll('italic');
+        return;
+      }
+      if (mod && isKeyU) {
+        e.preventDefault();
+        onFormatAll('underline');
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClearAllSelected();
+        return;
+      }
+      if (e.key.length === 1 && !mod && !e.altKey) {
+        e.preventDefault();
+        onReplaceAllWithChar(e.key);
+        return;
+      }
+      if (
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown'
+      ) {
+        onClearAllSelected();
+      }
+    }
+
+    // Cmd+Backspace (Cmd+Delete on MacBook): delete ONLY the current line, never the whole note
+    if (e.metaKey && e.key === 'Backspace') {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = elRef.current?.textContent ?? '';
+      if (text.length === 0) {
+        onBackspaceEmpty(block.id);
+      } else {
+        onDeleteSingleLine(block.id);
+      }
+      return;
+    }
+
+    if (mod && isKeyB) {
       e.preventDefault();
       document.execCommand('bold');
       handleInput();
       return;
     }
-    if (mod && e.key.toLowerCase() === 'i') {
+    if (mod && isKeyI) {
       e.preventDefault();
       document.execCommand('italic');
       handleInput();
       return;
     }
-    if (mod && e.key.toLowerCase() === 'u') {
+    if (mod && isKeyU) {
       e.preventDefault();
       document.execCommand('underline');
       handleInput();
@@ -172,7 +296,7 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
 
   return (
     <div className="relative min-w-0 flex-1">
-      {isEmpty && (
+      {isEmpty && placeholder && (
         <span
           aria-hidden="true"
           className={`pointer-events-none absolute inset-0 select-none text-slate-600 ${
@@ -190,16 +314,23 @@ const EditableTextBlock: React.FC<EditableTextBlockProps> = ({
         contentEditable
         suppressContentEditableWarning
         spellCheck
+        onMouseDown={() => {
+          if (isAllSelected) onClearAllSelected();
+        }}
         onFocus={() => onFocusBlock(block.id)}
         onInput={handleInput}
         onBlur={handleInput}
+        onCopy={handleCopy}
+        onCut={handleCut}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
-        className={`min-h-[26px] w-full break-words whitespace-pre-wrap outline-none ${
+        className={`min-h-[26px] w-full rounded-sm break-words whitespace-pre-wrap transition-colors outline-none ${
           isHeading
             ? 'font-display text-lg font-bold tracking-tight text-slate-100'
             : 'text-[15px] leading-relaxed text-slate-200'
-        } ${isChecked ? 'text-slate-500 line-through decoration-slate-600' : ''}`}
+        } ${isChecked ? 'text-slate-500 line-through decoration-slate-600' : ''} ${
+          isAllSelected && !isEmpty ? 'bg-blue-500/28 text-blue-50' : ''
+        }`}
       />
     </div>
   );
@@ -547,15 +678,34 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 }) => {
   const [activeBlockId, setActiveBlockId] = useState<string | null>(blocks[0]?.id ?? null);
   const [openMenu, setOpenMenu] = useState<'textColor' | 'highlight' | null>(null);
+  const [allTextSelected, setAllTextSelected] = useState(false);
 
+  const editorCanvasRef = useRef<HTMLDivElement | null>(null);
   const blockRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const pendingFocusIdRef = useRef<string | null>(null);
 
-  // Reset active block when switching notes
+  // Reset active block & full-note selection when switching notes
   useEffect(() => {
     setActiveBlockId(blocks[0]?.id ?? null);
     setOpenMenu(null);
+    setAllTextSelected(false);
   }, [noteId]);
+
+  // Listen for macOS Electron menu Cmd+A event when focus is inside the note body
+  useEffect(() => {
+    const onNativeSelectAll = (ev: Event) => {
+      const canvas = editorCanvasRef.current;
+      const active = document.activeElement;
+      if (!canvas || !active || !canvas.contains(active)) return;
+      // Do not hijack Cmd+A inside an embedded task <input>
+      if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') return;
+      ev.preventDefault();
+      setAllTextSelected(true);
+      window.getSelection()?.removeAllRanges();
+    };
+    window.addEventListener('yulist:select-all', onNativeSelectAll);
+    return () => window.removeEventListener('yulist:select-all', onNativeSelectAll);
+  }, []);
 
   // Focus newly created or navigated block cleanly
   useEffect(() => {
@@ -591,7 +741,55 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     onChangeBlocks(blocks.map((b) => (b.id === targetId ? { ...b, runs: nextRuns } : b)));
   };
 
+  // Apply formatting across ALL text blocks when Cmd+A whole-note selection is active
+  const applyFormatAcrossAllBlocks = (
+    updater: (run: TextRun, allAlreadyHave: boolean) => TextRun,
+    predicate?: (run: TextRun) => boolean
+  ) => {
+    const textRunsAll = blocks
+      .filter((b) => b.type !== 'task')
+      .flatMap((b) => b.runs ?? [])
+      .filter((r) => r.text.length > 0);
+    const allAlreadyHave =
+      predicate !== undefined && textRunsAll.length > 0 && textRunsAll.every(predicate);
+
+    const nextBlocks = blocks.map((b) => {
+      if (b.type === 'task') return b;
+      const runs = b.runs ?? [];
+      if (runs.length === 0) return b;
+      return {
+        ...b,
+        runs: normalizeRuns(runs.map((r) => updater(r, allAlreadyHave))),
+      };
+    });
+    onChangeBlocks(nextBlocks);
+  };
+
   const applyInlineCommand = (command: string, value?: string) => {
+    if (allTextSelected) {
+      if (command === 'bold') {
+        applyFormatAcrossAllBlocks((r, has) => ({ ...r, bold: !has }), (r) => Boolean(r.bold));
+      } else if (command === 'italic') {
+        applyFormatAcrossAllBlocks((r, has) => ({ ...r, italic: !has }), (r) => Boolean(r.italic));
+      } else if (command === 'underline') {
+        applyFormatAcrossAllBlocks(
+          (r, has) => ({ ...r, underline: !has }),
+          (r) => Boolean(r.underline)
+        );
+      } else if (command === 'strikeThrough') {
+        applyFormatAcrossAllBlocks((r, has) => ({ ...r, strike: !has }), (r) => Boolean(r.strike));
+      } else if (command === 'foreColor' && value) {
+        applyFormatAcrossAllBlocks((r) => ({ ...r, color: value }));
+      } else if (command === 'removeColor') {
+        applyFormatAcrossAllBlocks((r) => ({ ...r, color: undefined }));
+      } else if (command === 'hiliteColor' && value) {
+        applyFormatAcrossAllBlocks((r) => ({ ...r, highlight: value }));
+      } else if (command === 'removeHighlight') {
+        applyFormatAcrossAllBlocks((r) => ({ ...r, highlight: undefined }));
+      }
+      return;
+    }
+
     const targetId = activeBlockId ?? blocks.find((b) => b.type !== 'task')?.id ?? null;
     if (!targetId) return;
     const el = blockRefs.current.get(targetId);
@@ -613,13 +811,76 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     syncFocusedBlockDom();
   };
 
+  const handleSelectAllNote = () => {
+    setAllTextSelected(true);
+    // Clear browser single-div text selection so our unified cross-block selection highlight renders cleanly
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+  };
+
+  const handleDeleteAllSelected = () => {
+    setAllTextSelected(false);
+    const fresh: NoteBlock = { id: createBlockId(), type: 'paragraph', runs: [] };
+    onChangeBlocks([fresh]);
+    setActiveBlockId(fresh.id);
+    pendingFocusIdRef.current = fresh.id;
+  };
+
+  const handleReplaceAllWithChar = (char: string) => {
+    setAllTextSelected(false);
+    const fresh: NoteBlock = {
+      id: createBlockId(),
+      type: 'paragraph',
+      runs: char ? [{ text: char }] : [],
+    };
+    onChangeBlocks([fresh]);
+    setActiveBlockId(fresh.id);
+    pendingFocusIdRef.current = fresh.id;
+  };
+
+  const handleCopyAll = (cut: boolean) => {
+    const plain = extractNotePlainText(blocks);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(plain).catch(() => {
+        // Ignore clipboard permission errors
+      });
+    }
+    if (cut) {
+      handleDeleteAllSelected();
+    }
+  };
+
+  const handleDeleteSingleLine = (id: string) => {
+    // Deletes ONLY the text of this single line (keeping other lines untouched)
+    const nextBlocks = blocks.map((b) => (b.id === id ? { ...b, runs: [] } : b));
+    onChangeBlocks(nextBlocks);
+    pendingFocusIdRef.current = id;
+  };
+
   const activeBlock = blocks.find((b) => b.id === activeBlockId) ?? null;
 
   const setOrInsertTextBlockType = (
-    nextType: 'paragraph' | 'heading' | 'bullet' | 'checklist',
+    nextType: 'paragraph' | 'heading' | 'bullet' | 'numbered' | 'checklist',
     bulletStyle?: BulletStyle
   ) => {
     setOpenMenu(null);
+
+    if (allTextSelected) {
+      const nextBlocks = blocks.map((b) => {
+        if (b.type === 'task') return b;
+        return {
+          id: b.id,
+          type: nextType,
+          runs: b.runs ?? [],
+          ...(nextType === 'bullet' ? { bulletStyle: bulletStyle ?? 'dot' } : {}),
+          ...(nextType === 'checklist' ? { checked: Boolean(b.checked) } : {}),
+        };
+      });
+      onChangeBlocks(nextBlocks);
+      setAllTextSelected(false);
+      return;
+    }
+
     const idx = blocks.findIndex((b) => b.id === activeBlockId);
 
     if (idx !== -1 && blocks[idx].type !== 'task') {
@@ -662,6 +923,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
   const insertEmbeddedTask = () => {
     setOpenMenu(null);
+    setAllTextSelected(false);
     const newTaskBlock: NoteBlock = {
       id: createBlockId('ntask'),
       type: 'task',
@@ -696,9 +958,7 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
   };
 
   const handleToggleChecklist = (id: string) => {
-    onChangeBlocks(
-      blocks.map((b) => (b.id === id ? { ...b, checked: !b.checked } : b))
-    );
+    onChangeBlocks(blocks.map((b) => (b.id === id ? { ...b, checked: !b.checked } : b)));
   };
 
   const handleUpdateTaskData = (id: string, taskData: NoteTaskData) => {
@@ -723,8 +983,11 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     const current = blocks[idx];
     const currentText = getRunsPlainText(current.runs).trim();
 
-    // Pressing Enter on an empty bullet/checklist item exits the list cleanly
-    if ((current.type === 'bullet' || current.type === 'checklist') && currentText.length === 0) {
+    // Pressing Enter on an empty bullet/numbered/checklist item exits the list cleanly
+    if (
+      (current.type === 'bullet' || current.type === 'numbered' || current.type === 'checklist') &&
+      currentText.length === 0
+    ) {
       const nextBlocks = [...blocks];
       nextBlocks[idx] = { id: current.id, type: 'paragraph', runs: [] };
       onChangeBlocks(nextBlocks);
@@ -735,9 +998,11 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
     const newBlock: NoteBlock =
       current.type === 'bullet'
         ? { id: createBlockId(), type: 'bullet', bulletStyle: current.bulletStyle ?? 'dot', runs: [] }
-        : current.type === 'checklist'
-          ? { id: createBlockId(), type: 'checklist', checked: false, runs: [] }
-          : { id: createBlockId(), type: 'paragraph', runs: [] };
+        : current.type === 'numbered'
+          ? { id: createBlockId(), type: 'numbered', runs: [] }
+          : current.type === 'checklist'
+            ? { id: createBlockId(), type: 'checklist', checked: false, runs: [] }
+            : { id: createBlockId(), type: 'paragraph', runs: [] };
 
     const nextBlocks = [...blocks.slice(0, idx + 1), newBlock, ...blocks.slice(idx + 1)];
     onChangeBlocks(nextBlocks);
@@ -792,6 +1057,23 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
       cursor += step;
     }
   };
+
+  // Show placeholder ONLY on a completely clean, untouched note — never on Return blank lines
+  const isNoteCompletelyEmpty =
+    blocks.length === 1 &&
+    blocks[0].type === 'paragraph' &&
+    getRunsPlainText(blocks[0].runs).length === 0;
+
+  // Compute sequential numbering for consecutive numbered list blocks
+  let consecutiveNumber = 0;
+  const blockNumbers = blocks.map((b) => {
+    if (b.type === 'numbered') {
+      consecutiveNumber += 1;
+      return consecutiveNumber;
+    }
+    consecutiveNumber = 0;
+    return 0;
+  });
 
   return (
     <div className="flex flex-1 flex-col">
@@ -958,8 +1240,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
         <div className="mx-1 h-5 w-px bg-slate-800" aria-hidden="true" />
 
-        {/* Custom bullet markers: dot, star, small square, small heart */}
-        <div className="flex items-center gap-0.5" role="group" aria-label="Стили пунктов">
+        {/* Custom bullet markers (dot, star, square, heart) + numbered list (1. 2. 3.) */}
+        <div className="flex items-center gap-0.5" role="group" aria-label="Стили списков">
           {BULLET_STYLES.map((style) => {
             const isActive =
               activeBlock?.type === 'bullet' && activeBlock.bulletStyle === style.id;
@@ -981,6 +1263,21 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               </button>
             );
           })}
+
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setOrInsertTextBlockType('numbered')}
+            title="Нумерованный список (1. 2. 3.)"
+            aria-label="Нумерованный список"
+            className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+              activeBlock?.type === 'numbered'
+                ? 'bg-blue-500/20 text-blue-300 ring-1 ring-inset ring-blue-500/40'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <ListOrdered className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="mx-1 h-5 w-px bg-slate-800" aria-hidden="true" />
@@ -1017,7 +1314,8 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
 
       {/* Blocks canvas */}
       <div
-        className="flex-1 space-y-2 px-6 py-5"
+        ref={editorCanvasRef}
+        className="flex-1 space-y-1.5 px-6 py-5"
         onClick={() => {
           if (openMenu) setOpenMenu(null);
         }}
@@ -1038,15 +1336,9 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           }
 
           const placeholder =
-            block.type === 'heading'
-              ? 'Заголовок...'
-              : block.type === 'bullet'
-                ? 'Пункт списка...'
-                : block.type === 'checklist'
-                  ? 'Пункт чек-листа...'
-                  : index === 0 && blocks.length === 1
-                    ? 'Начните писать заметку... Выделите текст, чтобы изменить цвет, жирность или курсив.'
-                    : 'Введите текст...';
+            isNoteCompletelyEmpty && index === 0
+              ? 'Начните писать заметку... Выделите текст, чтобы изменить цвет, жирность или курсив.'
+              : '';
 
           return (
             <div key={block.id} className="group/blk flex items-start gap-2.5">
@@ -1058,6 +1350,15 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
                   )}`}
                 >
                   {getBulletSymbol(block.bulletStyle)}
+                </span>
+              )}
+
+              {block.type === 'numbered' && (
+                <span
+                  aria-hidden="true"
+                  className="mt-0.5 flex min-w-5 shrink-0 select-none justify-end font-mono text-sm font-medium text-blue-400 tabular-nums"
+                >
+                  {blockNumbers[index]}.
                 </span>
               )}
 
@@ -1081,9 +1382,18 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
               <EditableTextBlock
                 block={block}
                 placeholder={placeholder}
+                isAllSelected={allTextSelected}
                 registerRef={registerRef}
                 onFocusBlock={setActiveBlockId}
+                onClearAllSelected={() => setAllTextSelected(false)}
+                onSelectAllNote={handleSelectAllNote}
+                onDeleteAllSelected={handleDeleteAllSelected}
+                onReplaceAllWithChar={handleReplaceAllWithChar}
+                onCopyAll={handleCopyAll}
+                onGetAllPlainText={() => extractNotePlainText(blocks)}
+                onFormatAll={(fmt) => applyInlineCommand(fmt)}
                 onUpdateRuns={handleUpdateRuns}
+                onDeleteSingleLine={handleDeleteSingleLine}
                 onEnterKey={handleEnterKey}
                 onBackspaceEmpty={handleBackspaceEmpty}
                 onArrowNav={handleArrowNav}
@@ -1092,9 +1402,10 @@ export const RichNoteEditor: React.FC<RichNoteEditorProps> = ({
           );
         })}
 
-        {/* Subtle bottom click area to append a new paragraph when clicking empty space */}
+        {/* Subtle bottom click area to append a new clean paragraph when clicking empty space */}
         <div
           onClick={() => {
+            setAllTextSelected(false);
             const last = blocks[blocks.length - 1];
             if (last && last.type !== 'task' && getRunsPlainText(last.runs).length === 0) {
               setActiveBlockId(last.id);
