@@ -90,6 +90,7 @@ export const NotesView: React.FC<NotesViewProps> = ({
   focusTitleSignal,
 }) => {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const lastHandledFocusSignalRef = useRef<number>(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   // Prune any selected IDs that are no longer visible in the current filtered notes
@@ -110,8 +111,10 @@ export const NotesView: React.FC<NotesViewProps> = ({
     });
   }, [visibleIdKey, notes]);
 
+  // Focus title ONLY once when a new note is explicitly created, never on body edits
   useEffect(() => {
-    if (focusTitleSignal > 0 && selectedNote) {
+    if (focusTitleSignal > lastHandledFocusSignalRef.current && selectedNote) {
+      lastHandledFocusSignalRef.current = focusTitleSignal;
       titleInputRef.current?.focus();
     }
   }, [focusTitleSignal, selectedNote]);

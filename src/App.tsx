@@ -4,8 +4,8 @@ import {
   ClipboardList,
   Folder as FolderIcon,
   Globe,
-  Menu,
   NotebookPen,
+  PanelLeftOpen,
   Plus,
   RotateCcw,
 } from 'lucide-react';
@@ -42,7 +42,26 @@ export default function App() {
   const noteSearchInputRef = useRef<HTMLInputElement | null>(null);
   const newTaskInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem('yulist_sidebar_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  const isElectronMac =
+    typeof window !== 'undefined' &&
+    Boolean(window.yulistDesktop?.isElectron && window.yulistDesktop?.platform === 'darwin');
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('yulist_sidebar_collapsed', sidebarCollapsed ? '1' : '0');
+    } catch {
+      // Ignore storage errors
+    }
+  }, [sidebarCollapsed]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [folderModalState, setFolderModalState] = useState<{
     open: boolean;
@@ -116,6 +135,12 @@ export default function App() {
         const input = isNotesMode ? noteSearchInputRef.current : taskSearchInputRef.current;
         input?.focus();
         input?.select();
+        return;
+      }
+
+      if (mod && e.code === 'Backslash') {
+        e.preventDefault();
+        setSidebarCollapsed((prev) => !prev);
         return;
       }
 
@@ -230,6 +255,15 @@ export default function App() {
     store.setSelectedNoteId(note.id);
   };
 
+  const { setSelectedNoteId } = store;
+  const handleNoteUnlocked = useCallback(
+    (noteId: string) => {
+      setUnlockingNote(null);
+      setSelectedNoteId(noteId);
+    },
+    [setSelectedNoteId]
+  );
+
   return (
     <>
       <div className="yulist-canvas flex h-screen w-full overflow-hidden text-slate-100">
@@ -262,6 +296,8 @@ export default function App() {
             })
           }
           onOpenShortcuts={() => setShortcutsOpen(true)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
         />
@@ -269,16 +305,39 @@ export default function App() {
         {/* Main workspace viewport */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Top workspace header */}
-          <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-800/70 bg-[#0B111E]/75 px-5 py-4 backdrop-blur-md lg:px-7 macos-drag">
-            <div className="flex min-w-0 items-center gap-3 macos-no-drag">
+          <header
+            className={`flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-800/70 bg-[#0B111E]/75 py-3.5 pr-4 backdrop-blur-md lg:pr-7 macos-drag ${
+              isElectronMac
+                ? sidebarCollapsed
+                  ? 'pl-[88px]'
+                  : 'pl-[88px] lg:pl-7'
+                : 'pl-4 lg:pl-7'
+            }`}
+          >
+            <div className="flex min-w-0 items-center gap-2.5 macos-no-drag">
+              {/* Mobile/half-screen open folders button */}
               <button
                 type="button"
                 onClick={() => setMobileSidebarOpen(true)}
-                aria-label="Открыть панель папок"
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-800 bg-[#131C2E] text-slate-300 hover:bg-slate-800 hover:text-white lg:hidden"
+                title="Показать панель папок"
+                aria-label="Показать панель папок"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-[#131C2E] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white lg:hidden"
               >
-                <Menu className="h-4 w-4" />
+                <PanelLeftOpen className="h-4 w-4" />
               </button>
+
+              {/* Desktop restore folders button when sidebar is collapsed */}
+              {sidebarCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(false)}
+                  title="Показать панель папок (⌘\)"
+                  aria-label="Показать панель папок"
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-[#131C2E] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white lg:flex"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+              )}
 
               {currentActiveFolder ? (
                 <FolderIcon className={`h-5 w-5 shrink-0 ${activeFolderColor.textClass}`} />
@@ -551,10 +610,7 @@ export default function App() {
       <NoteUnlockModal
         note={unlockingNote}
         onClose={() => setUnlockingNote(null)}
-        onUnlocked={(noteId) => {
-          setUnlockingNote(null);
-          store.setSelectedNoteId(noteId);
-        }}
+        onUnlocked={handleNoteUnlocked}
       />
 
       <NoteLockSettingsModal

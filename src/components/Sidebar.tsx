@@ -3,6 +3,7 @@ import {
   Folder as FolderIcon,
   Globe,
   Keyboard,
+  PanelLeftClose,
   Pencil,
   Plus,
   Trash2,
@@ -21,6 +22,8 @@ interface SidebarProps {
   onEditFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
   onOpenShortcuts: () => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }
@@ -36,6 +39,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onEditFolder,
   onDeleteFolder,
   onOpenShortcuts,
+  collapsed,
+  onToggleCollapse,
   mobileOpen,
   onCloseMobile,
 }) => {
@@ -73,15 +78,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Section title */}
+      {/* Section title + right-side collapse sidebar button */}
       <div className="flex items-center justify-between px-4 pt-2 pb-2">
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-          <FolderIcon className="h-3.5 w-3.5 text-slate-500" />
-          <span>{sectionLabel}</span>
+        <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-400">
+          <FolderIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+          <span className="truncate">{sectionLabel}</span>
+          <span className="font-mono text-[11px] text-slate-500 tabular-nums">
+            {folders.length}
+          </span>
         </div>
-        <span className="font-mono text-[11px] text-slate-500 tabular-nums">
-          {folders.length}
-        </span>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (mobileOpen) {
+              onCloseMobile();
+            } else {
+              onToggleCollapse();
+            }
+          }}
+          title="Скрыть панель папок (⌘\)"
+          aria-label="Скрыть панель папок"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Folders list */}
@@ -218,8 +239,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop persistent sidebar */}
-      <div className="hidden h-full lg:block no-print">{content}</div>
+      {/* Desktop persistent sidebar (hidden when collapsed) */}
+      {!collapsed && <div className="hidden h-full lg:block no-print">{content}</div>}
 
       {/* Mobile slide-over drawer */}
       {mobileOpen && (

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, Fingerprint, Lock, LockOpen, ShieldCheck, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Eye, EyeOff, Fingerprint, KeyRound, Lock, LockOpen, ShieldCheck, X } from 'lucide-react';
 import { Note, NoteLock } from '../types/todo';
 import {
   authenticateWithTouchId,
@@ -25,23 +25,75 @@ export const NoteUnlockModal: React.FC<NoteUnlockModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [checking, setChecking] = useState(false);
+  const [touchIdPending, setTouchIdPending] = useState(false);
+  const [usePasswordMode, setUsePasswordMode] = useState(false);
   const [biometricInfo, setBiometricInfo] = useState<BiometricSupportInfo>({
     available: false,
     mode: 'none',
   });
 
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
+  const activeSessionRef = useRef<number>(0);
+  const onUnlockedRef = useRef(onUnlocked);
+  onUnlockedRef.current = onUnlocked;
+
+  const focusPasswordSoon = () => {
+    window.setTimeout(() => {
+      passwordInputRef.current?.focus();
+    }, 30);
+  };
+
   useEffect(() => {
-    if (!note) return;
+    if (!note || !note.lock) {
+      activeSessionRef.current += 1;
+      setTouchIdPending(false);
+      return;
+    }
+
+    const sessionId = activeSessionRef.current + 1;
+    activeSessionRef.current = sessionId;
+
+    const noteId = note.id;
+    const noteLock = note.lock;
+    const title = note.title.trim() || 'Без названия';
+
     setPassword('');
     setShowPassword(false);
     setError('');
     setChecking(false);
-    let mounted = true;
-    detectTouchIdSupport().then((info) => {
-      if (mounted) setBiometricInfo(info);
+    setUsePasswordMode(!noteLock.touchIdEnabled);
+    setTouchIdPending(Boolean(noteLock.touchIdEnabled));
+
+    let cancelled = false;
+
+    detectTouchIdSupport().then(async (info) => {
+      if (cancelled || activeSessionRef.current !== sessionId) return;
+      setBiometricInfo(info);
+
+      if (noteLock.touchIdEnabled && info.available) {
+        setTouchIdPending(true);
+        const res = await authenticateWithTouchId(
+          `открыть заметку «${title}»`,
+          noteLock.webAuthnCredentialId
+        );
+        if (cancelled || activeSessionRef.current !== sessionId) return;
+        setTouchIdPending(false);
+        if (res.ok) {
+          onUnlockedRef.current(noteId);
+        } else {
+          // Fallback seamlessly to password input when Touch ID is canceled or fails
+          setUsePasswordMode(true);
+          focusPasswordSoon();
+        }
+      } else {
+        setTouchIdPending(false);
+        setUsePasswordMode(true);
+        focusPasswordSoon();
+      }
     });
+
     return () => {
-      mounted = false;
+      cancelled = true;
     };
   }, [note]);
 
@@ -55,6 +107,7 @@ export const NoteUnlockModal: React.FC<NoteUnlockModalProps> = ({
     if (!note.lock) return;
     if (!password) {
       setError('Введите пароль');
+      passwordInputRef.current?.focus();
       return;
     }
     setChecking(true);
@@ -65,23 +118,38 @@ export const NoteUnlockModal: React.FC<NoteUnlockModalProps> = ({
       onUnlocked(note.id);
     } else {
       setError('Неверный пароль. Попробуйте снова.');
+      passwordInputRef.current?.select();
     }
   };
 
   const handleTouchId = async () => {
     if (!note.lock) return;
-    setChecking(true);
+    const sessionId = activeSessionRef.current;
+    setTouchIdPending(true);
+    setUsePasswordMode(false);
     setError('');
     const res = await authenticateWithTouchId(
       `открыть заметку «${noteTitle}»`,
       note.lock.webAuthnCredentialId
     );
-    setChecking(false);
+    if (activeSessionRef.current !== sessionId) return;
+    setTouchIdPending(false);
     if (res.ok) {
       onUnlocked(note.id);
-    } else if (res.error) {
-      setError(res.error);
+    } else {
+      setUsePasswordMode(true);
+      if (res.error) setError(res.error);
+      focusPasswordSoon();
     }
+  };
+
+  const handleSwitchToPassword = () => {
+    // Invalidate pending auto Touch ID result if user manually switches to password
+    activeSessionRef.current += 1;
+    setTouchIdPending(false);
+    setUsePasswordMode(true);
+    setError('');
+    focusPasswordSoon();
   };
 
   return (
@@ -97,8 +165,8 @@ export const NoteUnlockModal: React.FC<NoteUnlockModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-800/80 px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
               <Lock className="h-4 w-4" />
             </div>
             <div className="min-w-0">
@@ -116,76 +184,101 @@ export const NoteUnlockModal: React.FC<NoteUnlockModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Закрыть окно"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handlePasswordSubmit} className="space-y-4 px-5 py-5">
-          <div>
-            <label
-              htmlFor="unlock-note-password"
-              className="mb-1.5 block text-xs font-medium text-slate-400"
-            >
-              Пароль
-            </label>
-            <div className="relative">
-              <input
-                id="unlock-note-password"
-                type={showPassword ? 'text' : 'password'}
-                autoFocus
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (error) setError('');
-                }}
-                placeholder="Введите пароль от заметки..."
-                className="h-10 w-full rounded-lg border border-slate-700/90 bg-[#0D1424] pr-10 pl-3.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-                className="absolute top-1/2 right-2.5 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded text-slate-400 hover:text-slate-200"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+        {touchIdPending && !usePasswordMode ? (
+          <div className="flex flex-col items-center gap-4 px-5 py-7 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/35 bg-blue-500/12 text-blue-400">
+              <Fingerprint className="h-7 w-7 animate-pulse" />
             </div>
-          </div>
-
-          {error && <p className="text-xs font-medium text-red-400">{error}</p>}
-
-          <div className="flex flex-col gap-2.5 pt-1">
-            <button
-              type="submit"
-              disabled={checking}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-500 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-400 disabled:opacity-60"
-            >
-              <LockOpen className="h-4 w-4" />
-              <span>{checking ? 'Проверка...' : 'Разблокировать'}</span>
-            </button>
-
-            {canUseTouchId && (
-              <button
-                type="button"
-                disabled={checking}
-                onClick={handleTouchId}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-700/90 bg-[#0D1424] px-4 text-sm font-medium text-slate-100 transition-colors hover:border-blue-500/50 hover:bg-slate-800/80 disabled:opacity-60"
-              >
-                <Fingerprint className="h-4 w-4 text-blue-400" />
-                <span>Войти по Touch ID</span>
-              </button>
-            )}
-
-            {canUseTouchId && !biometricInfo.available && (
-              <p className="text-center text-[11px] text-slate-500">
-                Нативный Touch ID работает на MacBook в приложении yulist или в Safari / Chrome по HTTPS.
+            <div className="space-y-1">
+              <p className="font-display text-sm font-semibold text-slate-100">
+                Приложите палец к Touch ID
               </p>
-            )}
+              <p className="text-xs text-slate-400">
+                Отпечаток запрошен автоматически для быстрого входа
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSwitchToPassword}
+              className="mt-1 inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700/90 bg-[#0D1424] px-4 text-xs font-medium text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+            >
+              <KeyRound className="h-3.5 w-3.5 text-slate-400" />
+              <span>Ввести пароль</span>
+            </button>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={handlePasswordSubmit} className="space-y-4 px-5 py-5">
+            <div>
+              <label
+                htmlFor="unlock-note-password"
+                className="mb-1.5 block text-xs font-medium text-slate-400"
+              >
+                Пароль
+              </label>
+              <div className="relative">
+                <input
+                  ref={passwordInputRef}
+                  id="unlock-note-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoFocus
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError('');
+                  }}
+                  placeholder="Введите пароль от заметки..."
+                  className="h-10 w-full rounded-lg border border-slate-700/90 bg-[#0D1424] pr-10 pl-3.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                  className="absolute top-1/2 right-2.5 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded text-slate-400 hover:text-slate-200"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && <p className="text-xs font-medium text-red-400">{error}</p>}
+
+            <div className="flex flex-col gap-2.5 pt-1">
+              <button
+                type="submit"
+                disabled={checking}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-500 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-400 disabled:opacity-60"
+              >
+                <LockOpen className="h-4 w-4" />
+                <span>{checking ? 'Проверка...' : 'Разблокировать'}</span>
+              </button>
+
+              {canUseTouchId && (
+                <button
+                  type="button"
+                  disabled={checking || touchIdPending}
+                  onClick={handleTouchId}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-700/90 bg-[#0D1424] px-4 text-sm font-medium text-slate-100 transition-colors hover:border-blue-500/50 hover:bg-slate-800/80 disabled:opacity-60"
+                >
+                  <Fingerprint className="h-4 w-4 text-blue-400" />
+                  <span>Войти по Touch ID</span>
+                </button>
+              )}
+
+              {canUseTouchId && !biometricInfo.available && (
+                <p className="text-center text-[11px] text-slate-500">
+                  Нативный Touch ID работает на MacBook в приложении yulist или в Safari / Chrome по HTTPS.
+                </p>
+              )}
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

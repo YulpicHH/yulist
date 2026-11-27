@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, screen, shell, systemPreferences } = require('electron');
 const path = require('path');
 
 const isDev = Boolean(process.env.YULIST_DEV_URL);
@@ -75,6 +75,34 @@ function createAppMenu() {
       submenu: [
         { role: 'minimize', label: 'Свернуть' },
         { role: 'zoom', label: 'Изменить масштаб' },
+        { type: 'separator' },
+        {
+          label: 'Правая половина экрана',
+          click: (_menuItem, browserWindow) => {
+            if (!browserWindow) return;
+            if (browserWindow.isFullScreen()) browserWindow.setFullScreen(false);
+            const { x, y, width, height } = screen.getDisplayMatching(browserWindow.getBounds()).workArea;
+            const halfW = Math.floor(width / 2);
+            browserWindow.setBounds({ x: x + (width - halfW), y, width: halfW, height }, true);
+          },
+        },
+        {
+          label: 'Левая половина экрана',
+          click: (_menuItem, browserWindow) => {
+            if (!browserWindow) return;
+            if (browserWindow.isFullScreen()) browserWindow.setFullScreen(false);
+            const { x, y, width, height } = screen.getDisplayMatching(browserWindow.getBounds()).workArea;
+            const halfW = Math.floor(width / 2);
+            browserWindow.setBounds({ x, y, width: halfW, height }, true);
+          },
+        },
+        {
+          label: 'Развернуть на весь экран',
+          click: (_menuItem, browserWindow) => {
+            if (!browserWindow) return;
+            browserWindow.setFullScreen(!browserWindow.isFullScreen());
+          },
+        },
         ...(isMac
           ? [
               { type: 'separator' },
@@ -90,10 +118,13 @@ function createAppMenu() {
 
 function createMainWindow() {
   const win = new BrowserWindow({
-    width: 1360,
-    height: 860,
-    minWidth: 960,
-    minHeight: 620,
+    width: 1200,
+    height: 820,
+    minWidth: 380,
+    minHeight: 480,
+    resizable: true,
+    maximizable: true,
+    fullscreenable: true,
     title: 'yulist',
     backgroundColor: '#0B111E',
     titleBarStyle: 'hiddenInset',
